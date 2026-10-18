@@ -1,19 +1,4 @@
 @import "tailwindcss";
-@import "tailwindcss";
-
-@layer base {
-  :root {
-    /* ... existing code ... */
-  }
-  .dark {
-    /* ... existing code ... */
-  }
-}
-
-body {
-  /* ... existing code ... */
-}
-/* ... rest of your CSS ... */
 
 @layer base {
   :root {
