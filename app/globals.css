@@ -1,36 +1,75 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* Biyahe Live — design tokens
-   Pulled from PH provincial van/jeepney destination-board signage,
-   not a generic SaaS palette. "signal" yellow is reserved for exactly
-   one meaning across the app: a trip is live-broadcasting right now.
-   Tailwind v4 auto-generates utility classes (bg-route, text-ink, etc.)
-   from these --color-* variables — no tailwind.config.ts needed. */
-@theme {
-  --color-ink: #101B14;
-  --color-paper: #F2F4EC;
-  --color-route: #1F5D3A;
-  --color-route-dark: #153F27;
-  --color-signal: #F2B705;
-  --color-alert: #D64545;
-  --color-line: #D8DED2;
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --border: 214.3 31.8% 91.4%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+  }
 
-  --font-sans: var(--font-app-sans), system-ui, sans-serif;
-  --font-mono: var(--font-app-mono), ui-monospace, monospace;
-
-  --tracking-board: 0.02em;
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+  }
 }
 
 body {
-  background-color: var(--color-paper);
-  color: var(--color-ink);
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Respect reduced-motion preference for the live pulse animation */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+/* Premium Mesh Gradient Background */
+.mesh-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  background-color: #0a0f1c;
+  background-image: 
+    radial-gradient(at 80% 10%, rgba(16, 185, 129, 0.15) 0px, transparent 50%),
+    radial-gradient(at 20% 90%, rgba(59, 130, 246, 0.15) 0px, transparent 50%);
+  overflow: hidden;
+}
+
+.mesh-bg::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: rgba(17, 24, 39, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+.glass-panel-light {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
 }

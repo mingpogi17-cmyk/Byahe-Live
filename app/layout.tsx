@@ -1,49 +1,37 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-// Sans carries UI copy. Mono carries every number a commuter needs to
-// read at a glance in daylight — seats left, minutes, route codes —
-// mimicking an LED terminal departure board.
-const sans = Inter({
+const geistSans = Geist({
+  variable: "--font-geist-sans",
   subsets: ["latin"],
-  variable: "--font-app-sans",
-  display: "swap",
 });
 
-const mono = JetBrains_Mono({
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
   subsets: ["latin"],
-  variable: "--font-app-mono",
-  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Biyahe Live — Davao Region van & bus tracker",
-  description:
-    "Crowdsourced live tracking for provincial vans and buses across Davao Region — Digos, Tagum, Mati, Malita, Nabunturan.",
+  title: "Biyahe Live | Davao Commuter Telemetry",
+  description: "Real-time public transport tracking for Davao Region commuters.",
   manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "Biyahe Live",
-  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1F5D3A",
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
+  themeColor: "#0a0f1c",
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
-      <body className="bg-paper text-ink antialiased">{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        {children}
+      </body>
     </html>
   );
 }
