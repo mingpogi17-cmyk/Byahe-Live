@@ -1,5 +1,6 @@
 "use client";
-
+import Link from "next/link";
+import { Ticket } from "lucide-react";
 import { useState, useEffect } from "react";
 import { database } from "@/lib/firebase"; // i-adjust ang import path kung nasa root ang firebase.ts
 import { ref, onValue } from "firebase/database";
@@ -81,15 +82,25 @@ export default function CommuterPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 flex flex-col items-center">
-      {/* Header */}
-      <header className="w-full max-w-md my-4 flex items-center justify-between">
+          <header className="w-full max-w-md my-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Bus className="w-7 h-7 text-emerald-400" />
           <h1 className="text-xl font-bold tracking-wide">BIYAHE LIVE</h1>
         </div>
-        <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2.5 py-1 rounded-full font-semibold flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Live Updates
-        </span>
+        
+        {/* Container para sa Ticket at Live Updates */}
+        <div className="flex items-center gap-2">
+          <Link 
+            href="/commuter/ticket" 
+            className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-emerald-500 hover:text-white transition-all"
+          >
+            <Ticket className="w-3.5 h-3.5" /> Ticket
+          </Link>
+
+          <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2.5 py-1 rounded-full font-semibold flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Live Updates
+          </span>
+        </div>
       </header>
 
       {/* Main Container */}

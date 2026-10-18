@@ -59,7 +59,7 @@ export default function HomePage() {
       <nav className={`fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 transition-all ${isDark ? 'glass-panel' : 'glass-panel-light'}`}>
         <div className="flex items-center gap-2">
           <Bus className={`w-6 h-6 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
-          <span className="font-bold tracking-tight">Biyahe Live</span>
+          <span className={`font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Biyahe Live</span>
         </div>
         <div className="flex items-center gap-3">
           {showInstall && (
