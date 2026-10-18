@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* Biyahe Live — design tokens
+   Pulled from PH provincial van/jeepney destination-board signage,
+   not a generic SaaS palette. "signal" yellow is reserved for exactly
+   one meaning across the app: a trip is live-broadcasting right now.
+   Tailwind v4 auto-generates utility classes (bg-route, text-ink, etc.)
+   from these --color-* variables — no tailwind.config.ts needed. */
+@theme {
+  --color-ink: #101B14;
+  --color-paper: #F2F4EC;
+  --color-route: #1F5D3A;
+  --color-route-dark: #153F27;
+  --color-signal: #F2B705;
+  --color-alert: #D64545;
+  --color-line: #D8DED2;
+
+  --font-sans: var(--font-app-sans), system-ui, sans-serif;
+  --font-mono: var(--font-app-mono), ui-monospace, monospace;
+
+  --tracking-board: 0.02em;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+}
+
+/* Respect reduced-motion preference for the live pulse animation */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
