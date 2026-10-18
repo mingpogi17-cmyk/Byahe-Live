@@ -10,10 +10,17 @@ export default function DriverScanPage() {
   const [isValid, setIsValid] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // I-initialize ang scanner kapag nag-load ang page
+    // I-initialize ang scanner gamit ang REAR CAMERA (environment)
     const scanner = new Html5QrcodeScanner(
       "reader",
-      { fps: 10, qrbox: { width: 250, height: 250 } },
+      { 
+        fps: 10, 
+        qrbox: { width: 250, height: 250 },
+        // 🚨 ITO ANG NAG-FORCE SA REAR CAMERA
+        videoConstraints: {
+          facingMode: "environment" 
+        }
+      },
       /* verbose= */ false
     );
 
@@ -31,7 +38,7 @@ export default function DriverScanPage() {
         }
       },
       (error) => {
-        // Huwag pansinin ang mga error sa pag-scan (normal lang habang naghahanap)
+        // Huwag pansinin ang mga error sa pag-scan
       }
     );
 
