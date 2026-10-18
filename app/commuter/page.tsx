@@ -1,20 +1,16 @@
 "use client";
-import Link from "next/link";
-import { Ticket } from "lucide-react";
+
 import { useState, useEffect } from "react";
-import { database } from "@/lib/firebase"; // i-adjust ang import path kung nasa root ang firebase.ts
+import Link from "next/link";
+import { database } from "@/lib/firebase";
 import { ref, onValue } from "firebase/database";
-import { Bus, MapPin, Clock, WifiOff, AlertTriangle, Loader2, Navigation, RefreshCw } from "lucide-react";
+import { Bus, MapPin, Clock, WifiOff, AlertTriangle, Loader2, Ticket } from "lucide-react";
 
 interface TripData {
   tripId: string;
   status: "Available" | "Standing" | "Full";
-  location: {
-    lat: number;
-    lng: number;
-  };
-  speed?: number;
-  heading?: number;
+  location: { lat: number; lng: number };
+  seatsAvailable?: number;
   updatedAt: number;
 }
 
@@ -25,7 +21,7 @@ export default function CommuterPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [now, setNow] = useState<number>(Date.now());
 
-  // Timer to refresh "X minutes ago" display every 10s
+  // Timer para mag-refresh ang "X minutes ago"
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
@@ -66,7 +62,6 @@ export default function CommuterPage() {
       },
       (error) => {
         setLoading(false);
-        console.error("Firebase fetch error:", error);
         setErrorMsg("Hindi makakonekta sa server. Paki-check ang iyong internet connection.");
       }
     );
@@ -74,7 +69,6 @@ export default function CommuterPage() {
     return () => unsubscribe();
   }, []);
 
-  // Compute minutes ago
   const getMinutesAgo = (timestamp: number) => {
     const diffMs = now - timestamp;
     return Math.max(0, Math.floor(diffMs / 60000));
@@ -82,13 +76,13 @@ export default function CommuterPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 flex flex-col items-center">
-          <header className="w-full max-w-md my-4 flex items-center justify-between">
+      {/* Header with Ticket Button */}
+      <header className="w-full max-w-md my-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Bus className="w-7 h-7 text-emerald-400" />
           <h1 className="text-xl font-bold tracking-wide">BIYAHE LIVE</h1>
         </div>
         
-        {/* Container para sa Ticket at Live Updates */}
         <div className="flex items-center gap-2">
           <Link 
             href="/commuter/ticket" 
@@ -97,13 +91,12 @@ export default function CommuterPage() {
             <Ticket className="w-3.5 h-3.5" /> Ticket
           </Link>
 
-          <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2.5 py-1 rounded-full font-semibold flex items-center gap-1">
+          <span className="hidden md:flex text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2.5 py-1 rounded-full font-semibold items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Live Updates
           </span>
         </div>
       </header>
 
-      {/* Main Container */}
       <main className="w-full max-w-md space-y-4">
         {/* Offline Warning */}
         {isOffline && (
@@ -111,7 +104,7 @@ export default function CommuterPage() {
             <WifiOff className="w-6 h-6 shrink-0 text-amber-400" />
             <div>
               <p className="font-bold text-sm">Walang Koneksyon sa Internet</p>
-              <p className="text-xs text-amber-300/80">Nasa offline mode ka ngayon. Susubukan naming kumonekta ulit kapag may internet na.</p>
+              <p className="text-xs text-amber-300/80">Nasa offline mode ka ngayon.</p>
             </div>
           </div>
         )}
@@ -131,7 +124,7 @@ export default function CommuterPage() {
         {loading && (
           <div className="py-12 bg-slate-900 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-slate-400 space-y-3">
             <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-            <p className="text-sm font-medium">Kina-karga ang mga pampublikong sasakyan...</p>
+            <p className="text-sm font-medium">Kina-karga ang mga sasakyan...</p>
           </div>
         )}
 
@@ -140,9 +133,7 @@ export default function CommuterPage() {
           <div className="py-12 px-6 bg-slate-900 rounded-2xl border border-slate-800 text-center space-y-3">
             <Bus className="w-12 h-12 text-slate-600 mx-auto" />
             <p className="font-bold text-slate-300">Walang biyahe sa ngayon</p>
-            <p className="text-xs text-slate-500 max-w-xs mx-auto">
-              Sa kasalukuyan ay walang biyaheng aktibo. Mag-refresh mamaya kapag may paparating na sasakyan sa waiting shed.
-            </p>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">Mag-refresh mamaya kapag may paparating na sasakyan.</p>
           </div>
         )}
 
@@ -155,7 +146,7 @@ export default function CommuterPage() {
 
             {trips.map((trip) => {
               const minsAgo = getMinutesAgo(trip.updatedAt);
-              const isStale = minsAgo >= 30; // Hide/grey out updates older than 30 minutes
+              const isStale = minsAgo >= 30;
 
               return (
                 <div
@@ -172,9 +163,7 @@ export default function CommuterPage() {
                         <Bus className="w-5 h-5" />
                       </div>
                       <div>
-                        <h2 className="font-bold text-base text-slate-100">
-                          PUJ / PUV #{trip.tripId.slice(-4).toUpperCase()}
-                        </h2>
+                        <h2 className="font-bold text-base text-slate-100">PUJ / PUV #{trip.tripId.slice(-4).toUpperCase()}</h2>
                         <span className="text-[11px] text-slate-400 flex items-center gap-1">
                           <MapPin className="w-3 h-3 text-slate-500" />
                           {trip.location.lat.toFixed(4)}, {trip.location.lng.toFixed(4)}
@@ -182,21 +171,18 @@ export default function CommuterPage() {
                       </div>
                     </div>
 
-                    {/* Status Badge */}
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                        trip.status === "Available"
-                          ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
-                          : trip.status === "Standing"
-                          ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
-                          : "bg-rose-950/80 text-rose-300 border-rose-700/60"
-                      }`}
-                    >
-                      {trip.status === "Available" ? "may UPUAN" : trip.status === "Standing" ? "TAYO LANG" : "PUNO NA"}
+                    {/* Status Badge with Seat Count */}
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                      trip.status === "Available" ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                      : trip.status === "Standing" ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
+                      : "bg-rose-950/80 text-rose-300 border-rose-700/60"
+                    }`}>
+                      {trip.status === "Available" 
+                        ? `${trip.seatsAvailable ?? '?'} upuan` 
+                        : trip.status === "Standing" ? "Tayo Lang" : "Puno Na"}
                     </span>
                   </div>
 
-                  {/* Timestamp */}
                   <div className="flex items-center justify-between pt-3 border-t border-slate-800/80 text-xs text-slate-400">
                     <span className="flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5 text-slate-500" />
@@ -216,7 +202,6 @@ export default function CommuterPage() {
         )}
       </main>
 
-      {/* Footer Branding */}
       <footer className="text-center text-xs text-slate-500 my-8">
         Developed by Ray Mar Olandria · 0969-149-1319
       </footer>
