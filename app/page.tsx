@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { database } from "@/lib/firebase";
-import { ref, onValue } from "firebase/database";
+import { ref, onValue, set } from "firebase/database";
 import { Bus, MapPin, Clock, WifiOff, AlertTriangle, Ticket, Navigation, RefreshCw } from "lucide-react";
 
 interface TripData {
@@ -12,6 +12,7 @@ interface TripData {
   location: { lat: number; lng: number };
   seatsAvailable?: number;
   updatedAt: number;
+  reports?: { correct: number; wrong: number };
 }
 
 export default function HomePage() {
@@ -42,27 +43,36 @@ export default function HomePage() {
   useEffect(() => {
     setLoading(true);
     const tripsRef = ref(database, "live_trips");
-    
-    const unsubscribe = onValue(
-      tripsRef,
-      (snapshot) => {
-        setLoading(false);
-        setErrorMsg(null);
-        setLastRefresh(Date.now());
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          const list: TripData[] = Object.values(data);
-          setTrips(list);
-        } else {
-          setTrips([]);
-        }
-      },
-      (error) => {
-        setLoading(false);
-        setErrorMsg("Hindi makakonekta sa server. Paki-check ang iyong internet.");
+    const reportsRef = ref(database, "reports");
+
+    // Listen to trips
+    const unsubTrips = onValue(tripsRef, (snapshot) => {
+      setLoading(false);
+      setErrorMsg(null);
+      setLastRefresh(Date.now());
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        setTrips(Object.values(data));
+      } else {
+        setTrips([]);
       }
-    );
-    return () => unsubscribe();
+    }, (error) => {
+      setLoading(false);
+      setErrorMsg("Hindi makakonekta sa server.");
+    });
+
+    // Listen to reports
+    const unsubReports = onValue(reportsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const reportsData = snapshot.val();
+        setTrips(prev => prev.map(trip => ({
+          ...trip,
+          reports: reportsData[trip.tripId] || { correct: 0, wrong: 0 }
+        })));
+      }
+    });
+
+    return () => { unsubTrips(); unsubReports(); };
   }, []);
 
   const getMinutesAgo = (timestamp: number) => {
@@ -74,6 +84,21 @@ export default function HomePage() {
     setLoading(true);
     setLastRefresh(Date.now());
     setTimeout(() => setLoading(false), 500);
+  };
+
+  const handleReport = async (tripId: string, type: "correct" | "wrong") => {
+    try {
+      const trip = trips.find(t => t.tripId === tripId);
+      const currentReports = trip?.reports || { correct: 0, wrong: 0 };
+      const updates = {
+        correct: type === "correct" ? (currentReports.correct + 1) : currentReports.correct,
+        wrong: type === "wrong" ? (currentReports.wrong + 1) : currentReports.wrong,
+      };
+      await set(ref(database, `reports/${tripId}`), updates);
+      if (navigator.vibrate) navigator.vibrate(50);
+    } catch (err) {
+      console.error("Report error:", err);
+    }
   };
 
   return (
@@ -137,7 +162,6 @@ export default function HomePage() {
                   </div>
                   <div className="h-6 w-20 bg-slate-800 rounded-full animate-pulse"></div>
                 </div>
-                <div className="h-3 w-1/3 bg-slate-800 rounded animate-pulse pt-2 border-t border-slate-800"></div>
               </div>
             ))}
           </div>
@@ -162,14 +186,7 @@ export default function HomePage() {
               const isStale = minsAgo >= 30;
 
               return (
-                <div
-                  key={trip.tripId}
-                  className={`p-5 rounded-2xl border transition-all ${
-                    isStale
-                      ? "bg-slate-900/40 border-slate-800 opacity-40 grayscale"
-                      : "bg-slate-900 border-slate-800 hover:border-slate-700 shadow-md"
-                  }`}
-                >
+                <div key={trip.tripId} className={`p-5 rounded-2xl border transition-all ${isStale ? "bg-slate-900/40 border-slate-800 opacity-40 grayscale" : "bg-slate-900 border-slate-800 hover:border-slate-700 shadow-md"}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2.5">
                       <div className="p-2 bg-emerald-950/60 rounded-xl border border-emerald-800/40 text-emerald-400">
@@ -183,15 +200,8 @@ export default function HomePage() {
                         </span>
                       </div>
                     </div>
-
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                      trip.status === "Available" ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
-                      : trip.status === "Standing" ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
-                      : "bg-rose-950/80 text-rose-300 border-rose-700/60"
-                    }`}>
-                      {trip.status === "Available" 
-                        ? `${trip.seatsAvailable ?? '?'} upuan` 
-                        : trip.status === "Standing" ? "Tayo Lang" : "Puno Na"}
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${trip.status === "Available" ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60" : trip.status === "Standing" ? "bg-amber-950/80 text-amber-300 border-amber-700/60" : "bg-rose-950/80 text-rose-300 border-rose-700/60"}`}>
+                      {trip.status === "Available" ? `${trip.seatsAvailable ?? '?'} upuan` : trip.status === "Standing" ? "Tayo Lang" : "Puno Na"}
                     </span>
                   </div>
 
@@ -205,6 +215,17 @@ export default function HomePage() {
                         Huli na ang update (&gt;30m)
                       </span>
                     )}
+                  </div>
+
+                  {/* Report Buttons */}
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-800/80">
+                    <span className="text-[10px] text-slate-500">Tama ba ito?</span>
+                    <button onClick={() => handleReport(trip.tripId, "correct")} className="px-2 py-1 bg-emerald-950/50 border border-emerald-800/50 text-emerald-400 rounded-lg text-[10px] font-bold hover:bg-emerald-500 hover:text-white transition-all">
+                      👍 Tama ({trip.reports?.correct ?? 0})
+                    </button>
+                    <button onClick={() => handleReport(trip.tripId, "wrong")} className="px-2 py-1 bg-rose-950/50 border border-rose-800/50 text-rose-400 rounded-lg text-[10px] font-bold hover:bg-rose-500 hover:text-white transition-all">
+                      👎 Mali ({trip.reports?.wrong ?? 0})
+                    </button>
                   </div>
                 </div>
               );
