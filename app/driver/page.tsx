@@ -1,464 +1,298 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { database } from "@/lib/firebase";
-import { ref, onValue, set, remove } from "firebase/database";
+import { database, ensureAuth } from "@/lib/firebase";
+import { ref, set, remove, update, onValue } from "firebase/database";
 import { 
-  Bus, MapPin, Clock, WifiOff, AlertTriangle, Ticket, Navigation, 
-  RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, CloudRain, Bell, BellRing, Wallet, Siren, Award
+  Navigation, Play, Square, CheckCircle2, QrCode, Minus, Plus, 
+  ShieldAlert, Timer, Wallet, Power, AlertOctagon, Map, Siren, X
 } from "lucide-react";
 
-interface TripData {
-  tripId: string;
-  status: "Available" | "Standing" | "Full";
-  location: { lat: number; lng: number };
-  seatsAvailable?: number;
-  fare?: number;
-  isOutOfService?: boolean;
-  isEmergency?: boolean;
-  updatedAt: number;
-  reports?: { correct: number; wrong: number };
-  isVerified?: boolean;
-}
+export default function DriverPage() {
+  const [isLive, setIsLive] = useState(false);
+  const [status, setStatus] = useState<"Available" | "Standing" | "Full">("Available");
+  const [tripId, setTripId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [seatsTotal] = useState(14);
+  const [seatsAvailable, setSeatsAvailable] = useState(14);
 
-interface CommunityAlert {
-  id: string;
-  type: string;
-  timestamp: number;
-}
-
-interface Shed {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-}
-
-const SHEDS: Shed[] = [
-  { id: "sta_cruz", name: "Sta. Cruz", lat: 6.8342, lng: 125.4149 },
-  { id: "digos", name: "Digos City", lat: 6.7497, lng: 125.3572 },
-  { id: "panabo", name: "Panabo City", lat: 7.3079, lng: 125.6841 },
-  { id: "tagum", name: "Tagum City", lat: 7.4478, lng: 125.8072 },
-  { id: "carmen", name: "Carmen", lat: 7.2095, lng: 125.7055 },
-  { id: "babak", name: "Babak", lat: 7.1347, lng: 125.6837 },
-  { id: "samal", name: "Island Garden City of Samal", lat: 7.0733, lng: 125.7083 },
-  { id: "mintal", name: "Mintal", lat: 7.0997, lng: 125.5885 },
-  { id: "toril", name: "Toril", lat: 7.0153, lng: 125.4922 },
-  { id: "calinan", name: "Calinan", lat: 7.1861, lng: 125.4552 },
-];
-
-const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-};
-
-export default function HomePage() {
-  const [trips, setTrips] = useState<TripData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isOffline, setIsOffline] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [now, setNow] = useState<number>(Date.now());
-  const [lastRefresh, setLastRefresh] = useState<number>(Date.now());
+  const [fare, setFare] = useState(15);
+  const [earnings, setEarnings] = useState(0);
+  const [isOutOfService, setIsOutOfService] = useState(false);
+  const [isEmergency, setIsEmergency] = useState(false);
   
-  const [selectedShed, setSelectedShed] = useState<Shed>(SHEDS[0]);
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [showShedDropdown, setShowShedDropdown] = useState(false);
+  const [sosAlert, setSosAlert] = useState<any>(null);
 
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [activeAlert, setActiveAlert] = useState<CommunityAlert | null>(null);
-  const [alarms, setAlarms] = useState<{[key: string]: number}>({});
-
-  const [points, setPoints] = useState(0);
-  const [showSosModal, setShowSosModal] = useState(false);
-
-  useEffect(() => {
-    const savedPoints = localStorage.getItem("biyahe_points");
-    if (savedPoints) setPoints(parseInt(savedPoints));
-
-    const timer = setInterval(() => setNow(Date.now()), 10000);
-    return () => clearInterval(timer);
-  }, []);
+  const [reservedSeats, setReservedSeats] = useState(2);
+  const [isReservedActive, setIsReservedActive] = useState(false);
+  const [reservedTimer, setReservedTimer] = useState(0);
+  
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const watchIdRef = useRef<number | null>(null);
+  const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    const savedShedId = localStorage.getItem("favorite_shed");
-    if (savedShedId) {
-      const shed = SHEDS.find(s => s.id === savedShedId);
-      if (shed) { setSelectedShed(shed); setIsFavorite(true); }
+    const storedTripId = localStorage.getItem("biyahe_trip_id");
+    if (storedTripId) setTripId(storedTripId);
+    else {
+      const newTripId = "trip_" + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem("biyahe_trip_id", newTripId);
+      setTripId(newTripId);
     }
+
+    const savedLive = localStorage.getItem("biyahe_is_live");
+    const savedSeats = localStorage.getItem("biyahe_seats");
+    if (savedLive === "true") setIsLive(true);
+    if (savedSeats) setSeatsAvailable(parseInt(savedSeats));
+
+    const unsubSOS = onValue(ref(database, "sos_alert"), (snap) => {
+      if (snap.exists()) setSosAlert(snap.val());
+      else setSosAlert(null);
+    });
+
+    return () => unsubSOS();
   }, []);
 
   useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    setIsOffline(!navigator.onLine);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
+    localStorage.setItem("biyahe_is_live", isLive.toString());
+    localStorage.setItem("biyahe_seats", seatsAvailable.toString());
+  }, [isLive, seatsAvailable]);
 
-  useEffect(() => {
-    setLoading(true);
-    const tripsRef = ref(database, "live_trips");
-    const reportsRef = ref(database, "reports");
-    const alertRef = ref(database, "community_alert");
-
-    const unsubTrips = onValue(tripsRef, (snapshot) => {
-      setLoading(false);
-      setErrorMsg(null);
-      setLastRefresh(Date.now());
-      if (snapshot.exists()) setTrips(Object.values(snapshot.val()));
-      else setTrips([]);
-    }, () => {
-      setLoading(false);
-      setErrorMsg("Hindi makakonekta sa server.");
-    });
-
-    const unsubReports = onValue(reportsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const reportsData = snapshot.val();
-        setTrips(prev => prev.map(trip => ({
-          ...trip,
-          reports: reportsData[trip.tripId] || { correct: 0, wrong: 0 }
-        })));
-      }
-    });
-
-    const unsubAlert = onValue(alertRef, (snapshot) => {
-      if (snapshot.exists()) setActiveAlert(snapshot.val());
-      else setActiveAlert(null);
-    });
-
-    return () => { unsubTrips(); unsubReports(); unsubAlert(); };
-  }, []);
-
-  const sortedAndFilteredTrips = useMemo(() => {
-    const nearbyTrips = trips.filter(trip => {
-      if (trip.isOutOfService) return false; 
-      const distance = getDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
-      return distance <= 15;
-    });
-
-    return nearbyTrips.sort((a, b) => {
-      if (a.status === "Available" && b.status !== "Available") return -1;
-      if (a.status !== "Available" && b.status === "Available") return 1;
-      const distA = getDistance(selectedShed.lat, selectedShed.lng, a.location.lat, a.location.lng);
-      const distB = getDistance(selectedShed.lat, selectedShed.lng, b.location.lat, b.location.lng);
-      return distA - distB;
-    });
-  }, [trips, selectedShed]);
-
-  const getMinutesAgo = (timestamp: number) => Math.max(0, Math.floor((now - timestamp) / 60000));
-
-  const handleFavoriteShed = () => {
-    if (isFavorite) { localStorage.removeItem("favorite_shed"); setIsFavorite(false); }
-    else { localStorage.setItem("favorite_shed", selectedShed.id); setIsFavorite(true); }
-  };
-
-  const handleManualRefresh = () => {
-    setLoading(true);
-    setLastRefresh(Date.now());
-    setTimeout(() => setLoading(false), 500);
-  };
-
-  const handleReport = async (tripId: string, type: "correct" | "wrong") => {
-    try {
-      const trip = trips.find(t => t.tripId === tripId);
-      const currentReports = trip?.reports || { correct: 0, wrong: 0 };
-      const updates = {
-        correct: type === "correct" ? (currentReports.correct + 1) : currentReports.correct,
-        wrong: type === "wrong" ? (currentReports.wrong + 1) : currentReports.wrong,
-      };
-      await set(ref(database, `reports/${tripId}`), updates);
-      if (navigator.vibrate) navigator.vibrate(50);
-
-      const newPoints = points + 5;
-      setPoints(newPoints);
-      localStorage.setItem("biyahe_points", newPoints.toString());
-    } catch (err) { console.error(err); }
-  };
-
-  const handleCommunityReport = async (type: string) => {
-    try {
-      await set(ref(database, "community_alert"), { id: "alert_" + Date.now(), type, timestamp: Date.now() });
-      setShowReportModal(false);
-    } catch (err) { console.error(err); }
-  };
-
-  const handleClearAlert = async () => {
-    try { await remove(ref(database, "community_alert")); } catch (err) { console.error(err); }
-  };
-
-  const handleShare = async (trip: TripData) => {
-    const text = `Biyahe Live Update: May ${trip.status === "Available" ? `${trip.seatsAvailable} upuan` : trip.status} na paparating sa ${selectedShed.name}! Check mo: ${window.location.href}`;
-    if (navigator.share) {
-      try { await navigator.share({ title: "Biyahe Live", text, url: window.location.href }); } catch (e) {}
-    } else {
-      await navigator.clipboard.writeText(text);
-      alert("Copied to clipboard! I-paste sa GC/Messenger.");
+  const triggerVibration = (type: "available" | "standing" | "full") => {
+    if (navigator.vibrate) {
+      if (type === "available") navigator.vibrate(50);
+      else if (type === "standing") navigator.vibrate([50, 50, 50]);
+      else if (type === "full") navigator.vibrate([100, 50, 100, 50, 100]);
     }
   };
 
-  const toggleAlarm = (tripId: string) => {
-    if (alarms[tripId]) {
-      const newAlarms = { ...alarms };
-      delete newAlarms[tripId];
-      setAlarms(newAlarms);
-    } else {
-      setAlarms(prev => ({ ...prev, [tripId]: Date.now() + 10 * 60 * 1000 }));
-      if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-      alert("Alarm set! Mag-a-alert ang phone mo kapag malapit na ang sasakyan (Mock: 10 mins).");
-    }
-  };
-
-  const triggerSOS = async () => {
+  const pushLocationToFirebase = async (position: GeolocationPosition, currentStatus: string, currentSeats: number, currentReserved: number) => {
+    if (!tripId) return;
     try {
-      await set(ref(database, "sos_alert"), { 
-        id: "sos_" + Date.now(), 
-        shed: selectedShed.name,
-        timestamp: Date.now() 
+      await ensureAuth();
+      const currentCoords = { lat: position.coords.latitude, lng: position.coords.longitude };
+      const tripRef = ref(database, `live_trips/${tripId}`);
+      await set(tripRef, {
+        tripId, 
+        status: isOutOfService ? "Full" : currentStatus,
+        location: currentCoords, 
+        seatsAvailable: currentSeats, 
+        reservedSeats: currentReserved,
+        fare,
+        isOutOfService,
+        isEmergency,
+        updatedAt: Date.now(),
       });
-      setShowSosModal(false);
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
-      alert("SOS Sent! Na-notify na ang mga driver at authorities sa area.");
-    } catch (err) { console.error(err); }
+      setErrorMessage(null);
+    } catch (err) { setErrorMessage("Maling koneksyon sa internet."); }
   };
 
-  const alertStyles = (type: string) => {
-    switch(type) {
-      case "May Dumaan": return "bg-emerald-950/80 border-emerald-500/50 text-emerald-300";
-      case "Traffic": return "bg-amber-950/80 border-amber-500/50 text-amber-300";
-      case "Puno Na": return "bg-rose-950/80 border-rose-500/50 text-rose-300";
-      default: return "bg-slate-800 border-slate-600 text-slate-300";
+  const handleStartTrip = async () => {
+    if (!navigator.geolocation) return setErrorMessage("Walang Geolocation.");
+    setIsLive(true); setErrorMessage(null); setEarnings(0);
+    try { await ensureAuth(); } catch (err) { return setErrorMessage("Hindi maka-login."); }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => pushLocationToFirebase(pos, status, seatsAvailable, isReservedActive ? reservedSeats : 0),
+      () => setErrorMessage("Paki-allow ang Location.")
+    );
+
+    let latestPos: GeolocationPosition | null = null;
+    watchIdRef.current = navigator.geolocation.watchPosition((pos) => {
+      latestPos = pos;
+      pushLocationToFirebase(pos, status, seatsAvailable, isReservedActive ? reservedSeats : 0);
+    });
+
+    intervalIdRef.current = setInterval(() => {
+      if (latestPos) pushLocationToFirebase(latestPos, status, seatsAvailable, isReservedActive ? reservedSeats : 0);
+    }, 10000);
+  };
+
+  const handleEndTrip = async () => {
+    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+    if (intervalIdRef.current !== null) clearInterval(intervalIdRef.current);
+    if (timerRef.current !== null) clearInterval(timerRef.current);
+    if (tripId) {
+      try { await ensureAuth(); await remove(ref(database, `live_trips/${tripId}`)); } catch (err) { console.error(err); }
     }
+    setIsLive(false);
+    setIsReservedActive(false);
+    setIsOutOfService(false);
+    setIsEmergency(false);
+    localStorage.removeItem("biyahe_is_live");
+    localStorage.removeItem("biyahe_seats");
+  };
+
+  const updateSeats = async (delta: number) => {
+    const newSeats = Math.max(0, Math.min(seatsTotal, seatsAvailable + delta));
+    setSeatsAvailable(newSeats);
+    
+    if (delta === -1) setEarnings(prev => prev + fare);
+
+    let newStatus: "Available" | "Standing" | "Full" = "Available";
+    if (newSeats === 0) newStatus = "Full";
+    else if (newSeats <= 3) newStatus = "Standing";
+    setStatus(newStatus);
+
+    triggerVibration(newStatus.toLowerCase() as any);
+
+    if (isLive && tripId) {
+      try { await ensureAuth(); await update(ref(database, `live_trips/${tripId}`), { seatsAvailable: newSeats, status: newStatus }); } catch (err) { console.error(err); }
+    }
+  };
+
+  const toggleReservedSeats = () => {
+    if (isReservedActive) {
+      setIsReservedActive(false);
+      if (timerRef.current !== null) clearInterval(timerRef.current);
+      setReservedTimer(0);
+    } else {
+      setIsReservedActive(true);
+      setReservedTimer(180);
+      timerRef.current = setInterval(() => {
+        setReservedTimer(prev => {
+          if (prev <= 1) {
+            if (timerRef.current !== null) clearInterval(timerRef.current);
+            setIsReservedActive(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+  };
+
+  const toggleEmergency = async () => {
+    const newState = !isEmergency;
+    setIsEmergency(newState);
+    if (newState) {
+      try { await set(ref(database, "community_alert"), { id: "alert_" + Date.now(), type: "Emergency", timestamp: Date.now() }); } catch (err) {}
+    } else {
+      try { await remove(ref(database, "community_alert")); } catch (err) {}
+    }
+  };
+
+  const dismissSOS = async () => {
+    try { await remove(ref(database, "sos_alert")); } catch (err) { console.error(err); }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 flex flex-col items-center relative">
+    <div className={`min-h-screen bg-slate-900 text-white p-4 md:p-8 flex flex-col items-center justify-between relative ${isEmergency ? 'bg-rose-950' : ''}`}>
       
-      {activeAlert && (
-        <div className={`fixed top-4 z-50 w-full max-w-md px-4 py-3 rounded-xl border shadow-lg flex items-center justify-between animate-in slide-in-from-top-2 ${alertStyles(activeAlert.type)}`}>
-          <div className="flex items-center gap-2 font-bold text-sm">
-            <Megaphone className="w-5 h-5" />
-            <span>{activeAlert.type} ({getMinutesAgo(activeAlert.timestamp)}m ago)</span>
+      {sosAlert && (
+        <div className="fixed top-0 left-0 w-full z-[100] bg-rose-600 p-4 flex items-center justify-between animate-pulse shadow-2xl">
+          <div className="flex items-center gap-3 text-white">
+            <Siren className="w-8 h-8 animate-bounce" />
+            <div>
+              <p className="font-black text-lg">SOS ALERT!</p>
+              <p className="text-xs font-semibold">Location: {sosAlert.shed}</p>
+            </div>
           </div>
-          <button onClick={handleClearAlert} className="p-1 hover:bg-black/20 rounded-full transition"><X className="w-4 h-4" /></button>
+          <button onClick={dismissSOS} className="p-2 bg-black/20 rounded-full text-white hover:bg-black/40 transition">
+            <X className="w-6 h-6" />
+          </button>
         </div>
       )}
 
-      <button onClick={() => setShowSosModal(true)} className="fixed bottom-6 right-6 z-50 p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse">
-        <Siren className="w-8 h-8" />
-      </button>
-
-      <header className="w-full max-w-md my-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bus className="w-7 h-7 text-emerald-400" />
-          <h1 className="text-xl font-bold tracking-wide">BIYAHE LIVE</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-1 rounded-full text-xs font-bold">
-            <Award className="w-3.5 h-3.5" /> {points} pts
-          </div>
-          <Link href="/driver" className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-slate-700 transition-all">
-            <Navigation className="w-3.5 h-3.5" /> Driver
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
+        <a href="https://waze.com/ul" target="_blank" rel="noopener noreferrer" className="p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl transition-all flex items-center justify-center">
+          <Map className="w-6 h-6" />
+        </a>
+        {isLive && (
+          <Link href="/driver/scan" className="p-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full shadow-2xl transition-all flex items-center gap-2">
+            <QrCode className="w-6 h-6" /><span className="font-bold pr-2">Scan</span>
           </Link>
-        </div>
-      </header>
+        )}
+      </div>
 
-      <main className="w-full max-w-md space-y-4 pt-12">
+      <div className="w-full max-w-md text-center my-4">
+        <h1 className="text-2xl font-bold flex items-center justify-center gap-2">
+          <Navigation className="w-8 h-8 text-emerald-400" /> BIYAHE LIVE - DRIVER
+        </h1>
+      </div>
+
+      <div className="w-full max-w-md bg-slate-800 rounded-2xl p-6 shadow-xl border border-slate-700 space-y-4">
         
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
-            <div className="relative">
-              <button onClick={() => setShowShedDropdown(!showShedDropdown)} className="flex items-center gap-2 text-sm font-bold text-slate-200 hover:text-white transition-colors">
-                <MapPin className="w-4 h-4 text-emerald-400" />
-                {selectedShed.name}
-                <ChevronDown className="w-4 h-4 text-slate-500" />
-              </button>
-              {showShedDropdown && (
-                <div className="absolute top-full left-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1">
-                  {SHEDS.map(shed => (
-                    <button key={shed.id} onClick={() => { setSelectedShed(shed); setShowShedDropdown(false); }} className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-700 transition-colors ${selectedShed.id === shed.id ? 'text-emerald-400 font-bold bg-slate-700/50' : 'text-slate-300'}`}>
-                      {shed.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 text-[10px] text-blue-400 bg-blue-950/30 px-2 py-1 rounded-md border border-blue-900/50">
-                <CloudRain className="w-3 h-3" /> 28°C
-              </div>
-              <button onClick={handleFavoriteShed} className={`p-1.5 rounded-lg transition-colors ${isFavorite ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'}`}>
-                <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
-              </button>
-            </div>
+        <div className={`p-4 rounded-xl flex items-center justify-between ${isLive ? (isOutOfService ? 'bg-slate-700 border-slate-500' : 'bg-emerald-950/80 border-emerald-500/50') : 'bg-slate-700/50'}`}>
+          <div>
+            <p className="text-xs text-slate-400 uppercase font-semibold">TRIP STATUS</p>
+            <p className="font-bold text-lg">{isLive ? (isOutOfService ? "OUT OF SERVICE" : "LIVE BROADCASTING") : "OFFLINE"}</p>
           </div>
+          {isLive && !isOutOfService && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
+        </div>
 
-          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
-            <span className="text-xs text-slate-500 flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {getMinutesAgo(lastRefresh) === 0 ? "Ngayon lang" : `${getMinutesAgo(lastRefresh)} min`}
-            </span>
+        {errorMessage && <div className="p-3 bg-rose-950 text-rose-200 rounded-lg text-sm">{errorMessage}</div>}
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center">
+            <Wallet className="w-5 h-5 text-emerald-400 mb-1" />
+            <p className="text-[10px] text-slate-400">KITA NGAYON</p>
+            <p className="text-xl font-black text-white">₱{earnings}</p>
+          </div>
+          <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center">
+            <p className="text-[10px] text-slate-400 mb-1">PAMASAHE</p>
             <div className="flex items-center gap-2">
-              <Link href="/commuter/ticket" className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 rounded-lg text-xs font-bold hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-1">
-                <Ticket className="w-3 h-3" /> Ticket
-              </Link>
-              <button onClick={() => setShowReportModal(true)} className="px-3 py-1 bg-amber-500/10 border border-amber-500/50 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500 hover:text-white transition-all flex items-center gap-1">
-                <Megaphone className="w-3 h-3" /> Report
-              </button>
-              <button onClick={handleManualRefresh} className={`p-1.5 rounded-lg hover:bg-slate-800 transition-all ${loading ? 'animate-spin text-emerald-400' : 'text-slate-400'}`}>
-                <RefreshCw className="w-4 h-4" />
-              </button>
+              <button onClick={() => setFare(Math.max(5, fare - 5))} className="text-slate-400 hover:text-white">-</button>
+              <p className="text-xl font-black text-amber-400">₱{fare}</p>
+              <button onClick={() => setFare(fare + 5)} className="text-slate-400 hover:text-white">+</button>
             </div>
           </div>
         </div>
-
-        {isOffline && (
-          <div className="p-4 bg-amber-950/90 border border-amber-600/50 rounded-xl flex items-center gap-3 text-amber-200">
-            <WifiOff className="w-6 h-6 shrink-0 text-amber-400" />
-            <div><p className="font-bold text-sm">Walang Koneksyon</p><p className="text-xs text-amber-300/80">Nasa offline mode ka.</p></div>
+        
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
+          <p className="text-xs text-slate-400 text-center mb-3">AVAILABLE SEATS</p>
+          <div className="flex items-center justify-between">
+            <button onClick={() => updateSeats(-1)} className="p-4 bg-slate-800 hover:bg-slate-700 rounded-xl active:scale-95"><Minus className="w-6 h-6" /></button>
+            <span className={`text-4xl font-black ${seatsAvailable === 0 ? 'text-rose-500' : seatsAvailable <= 3 ? 'text-amber-400' : 'text-emerald-400'}`}>{seatsAvailable}</span>
+            <button onClick={() => updateSeats(1)} className="p-4 bg-slate-800 hover:bg-slate-700 rounded-xl active:scale-95"><Plus className="w-6 h-6" /></button>
           </div>
-        )}
+        </div>
 
-        {errorMsg && !isOffline && (
-          <div className="p-4 bg-rose-950/90 border border-rose-600/50 rounded-xl flex items-center gap-3 text-rose-200">
-            <AlertTriangle className="w-6 h-6 shrink-0 text-rose-400" />
-            <div><p className="font-bold text-sm">Problema</p><p className="text-xs text-rose-300/80">{errorMsg}</p></div>
-          </div>
-        )}
-
-        {loading && (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-800 animate-pulse"></div>
-                  <div className="space-y-2 flex-1"><div className="h-4 w-1/2 bg-slate-800 rounded animate-pulse"></div></div>
-                </div>
+        <div className={`p-4 rounded-xl border transition-all ${isReservedActive ? 'bg-amber-950/50 border-amber-500/50' : 'bg-slate-900 border-slate-700'}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className={`w-5 h-5 ${isReservedActive ? 'text-amber-400' : 'text-slate-500'}`} />
+              <div>
+                <p className="text-sm font-bold">Reserved Seats</p>
+                <p className="text-[10px] text-slate-500">Para sa mga walang cellphone</p>
               </div>
-            ))}
-          </div>
-        )}
-
-        {!loading && sortedAndFilteredTrips.length === 0 && !errorMsg && (
-          <div className="py-12 px-6 bg-slate-900 rounded-2xl border border-slate-800 text-center space-y-3">
-            <Bus className="w-12 h-12 text-slate-600 mx-auto" />
-            <p className="font-bold text-slate-300">Walang biyahe sa malapit</p>
-            <p className="text-xs text-slate-500">Mag-refresh mamaya o mag-report kung may dumaan.</p>
-          </div>
-        )}
-
-        {!loading && sortedAndFilteredTrips.length > 0 && (
-          <div className="space-y-3 pb-20">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
-              PAPARATING SA {selectedShed.name.toUpperCase()} ({sortedAndFilteredTrips.length})
-            </p>
-
-            {sortedAndFilteredTrips.map((trip) => {
-              const minsAgo = getMinutesAgo(trip.updatedAt);
-              const isStale = minsAgo >= 30;
-              const distance = getDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
-              const trustScore = trip.reports ? trip.reports.correct - trip.reports.wrong : 0;
-              const isLowTrust = trustScore < -2;
-              const hasAlarm = alarms[trip.tripId];
-              const fareDisplay = trip.fare ? `₱${trip.fare}` : "₱15";
-
-              return (
-                <div key={trip.tripId} className={`p-5 rounded-2xl border transition-all ${isStale || isLowTrust ? "opacity-40 grayscale" : "bg-slate-900 border-slate-800 shadow-md"}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 bg-emerald-950/60 rounded-xl border border-emerald-800/40 text-emerald-400"><Bus className="w-5 h-5" /></div>
-                      <div>
-                        <h2 className="font-bold text-base flex items-center gap-1.5">
-                          PUJ / PUV #{trip.tripId.slice(-4).toUpperCase()}
-                          {trip.isVerified && <ShieldCheck className="w-4 h-4 text-blue-400" />}
-                        </h2>
-                        <span className="text-[11px] text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> {distance.toFixed(1)} km away</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold border ${trip.status === "Available" ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60" : trip.status === "Standing" ? "bg-amber-950/80 text-amber-300 border-amber-700/60" : "bg-rose-950/80 text-rose-300 border-rose-700/60"}`}>
-                        {trip.status === "Available" ? `${trip.seatsAvailable ?? '?'} upuan` : trip.status === "Standing" ? "Tayo Lang" : "Puno Na"}
-                      </span>
-                      <span className="text-[10px] font-bold text-amber-400 flex items-center gap-0.5">
-                        <Wallet className="w-3 h-3" /> {fareDisplay}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-800/80 text-xs text-slate-400">
-                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {minsAgo === 0 ? "Ngayon lang" : `${minsAgo} min`}</span>
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => toggleAlarm(trip.tripId)} className={`flex items-center gap-1 transition-colors ${hasAlarm ? 'text-amber-400 font-bold' : 'text-slate-500 hover:text-slate-300'}`}>
-                        {hasAlarm ? <BellRing className="w-3.5 h-3.5 animate-pulse" /> : <Bell className="w-3.5 h-3.5" />}
-                        {hasAlarm ? "Alarm On" : "Set Alarm"}
-                      </button>
-                      <button onClick={() => handleShare(trip)} className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-semibold transition-colors">
-                        <Share2 className="w-3.5 h-3.5" /> Share
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-800/80">
-                    <span className="text-[10px] text-slate-500">Tama ba ito?</span>
-                    <button onClick={() => handleReport(trip.tripId, "correct")} className="px-2 py-1 bg-emerald-950/50 border border-emerald-800/50 text-emerald-400 rounded-lg text-[10px] font-bold hover:bg-emerald-500 hover:text-white transition-all">👍 Tama ({trip.reports?.correct ?? 0})</button>
-                    <button onClick={() => handleReport(trip.tripId, "wrong")} className="px-2 py-1 bg-rose-950/50 border border-rose-800/50 text-rose-400 rounded-lg text-[10px] font-bold hover:bg-rose-500 hover:text-white transition-all">👎 Mali ({trip.reports?.wrong ?? 0})</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
-
-      <footer className="text-center text-xs text-slate-500 my-8 pb-16">
-        Biyahe Live © 2026 · Developed by Ray Mar Olandria
-      </footer>
-
-      {showReportModal && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Megaphone className="w-5 h-5 text-amber-400" /> Report Situation</h2>
-              <button onClick={() => setShowReportModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-xs text-slate-400 mb-4">Pumili ng sitwasyon sa waiting shed ngayon.</p>
-            <div className="space-y-2">
-              {["May Dumaan", "Traffic", "Puno Na", "Walang Dumadaan"].map((situation) => (
-                <button key={situation} onClick={() => handleCommunityReport(situation)} className="w-full p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-left font-semibold text-sm transition-all flex items-center gap-3">
-                  <CheckCircle2 className="w-4 h-4 text-slate-500" /> {situation}
-                </button>
-              ))}
-            </div>
+            <button onClick={toggleReservedSeats} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isReservedActive ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+              {isReservedActive ? "ON" : "OFF"}
+            </button>
           </div>
+          {isReservedActive && (
+            <div className="mt-3 pt-3 border-t border-amber-800/30 flex items-center justify-between">
+              <span className="text-xs text-amber-300 flex items-center gap-1"><Timer className="w-3 h-3" /> Timer:</span>
+              <span className="font-mono text-lg font-bold text-amber-400">{formatTime(reservedTimer)}</span>
+            </div>
+          )}
         </div>
-      )}
 
-      {showSosModal && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200 text-center">
-            <Siren className="w-16 h-16 text-rose-500 mx-auto mb-4 animate-pulse" />
-            <h2 className="text-2xl font-black text-white mb-2">Kumpirmahin ang SOS</h2>
-            <p className="text-sm text-rose-200 mb-6">I-tap ang "Send SOS" kung may emergency.</p>
-            <div className="space-y-3">
-              <button onClick={triggerSOS} className="w-full py-4 bg-rose-600 text-white font-black text-lg rounded-xl shadow-lg hover:bg-rose-500 transition-all">
-                SEND SOS NOW
-              </button>
-              <button onClick={() => setShowSosModal(false)} className="w-full py-3 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-all">
-                Cancel
-              </button>
-            </div>
-          </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => setIsOutOfService(!isOutOfService)} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${isOutOfService ? 'bg-slate-700 border-slate-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>
+            <Power className="w-5 h-5" />
+            <span className="text-xs font-bold">OUT OF SERVICE</span>
+          </button>
+          <button onClick={toggleEmergency} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${isEmergency ? 'bg-rose-600 border-rose-400 text-white animate-pulse' : 'bg-slate-900 border-slate-700 text-rose-400'}`}>
+            <AlertOctagon className="w-5 h-5" />
+            <span className="text-xs font-bold">EMERGENCY</span>
+          </button>
         </div>
-      )}
+
+        {!isLive ? (
+          <button onClick={handleStartTrip} className="w-full py-5 bg-emerald-500 text-slate-950 font-black text-xl rounded-2xl mt-2">START TRIP</button>
+        ) : (
+          <button onClick={handleEndTrip} className="w-full py-5 bg-rose-600 text-white font-black text-xl rounded-2xl mt-2">END TRIP</button>
+        )}
+      </div>
     </div>
   );
 }
