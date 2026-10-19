@@ -54,9 +54,9 @@ export default function HomePage() {
     show: { opacity: 1, transition: { staggerChildren: 0.15 } }
   };
 
-  const itemVariants = {
+   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300 } }
+    show: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 300 } }
   };
 
   return (
