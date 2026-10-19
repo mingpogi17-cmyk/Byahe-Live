@@ -227,9 +227,11 @@ export default function HomePage() {
               );
             })}
           </div>
-        )}
-      </main>
+              </main>
 
       <footer className="text-center text-xs text-slate-500 my-8">
-  Biyahe Live © 2026 · Developed by Ray Mar P Olandria
-</footer>
+        Biyahe Live © 2026 · Developed by Ray Mar P Olandria
+      </footer>
+    </div>
+  );
+}
