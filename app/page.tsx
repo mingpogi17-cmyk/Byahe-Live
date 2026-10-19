@@ -54,7 +54,7 @@ export default function HomePage() {
     show: { opacity: 1, transition: { staggerChildren: 0.15 } }
   };
 
-   const itemVariants = {
+  const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 300 } }
   };
@@ -62,13 +62,14 @@ export default function HomePage() {
   return (
     <div className={`relative min-h-screen flex flex-col items-center justify-center p-6 overflow-hidden ${isDark ? 'text-white' : 'text-slate-900'}`}>
       
-      {/* Premium Mesh Background with Animation */}
+      {/* Premium Mesh Background */}
       <div className="mesh-bg"></div>
 
-      <nav className={`fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 transition-all ${isDark ? 'glass-panel' : 'glass-panel-light'}`}>
+      {/* Navbar */}
+      <nav className={`fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 transition-all ${isDark ? 'glass-panel' : 'bg-white/80 backdrop-blur-md border-b border-slate-200 shadow-sm'}`}>
         <div className="flex items-center gap-2">
           <Bus className={`w-6 h-6 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
-          <span className="font-bold tracking-tight">Biyahe Live</span>
+          <span className={`font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Biyahe Live</span>
         </div>
         <div className="flex items-center gap-3">
           {showInstall && (
@@ -76,12 +77,13 @@ export default function HomePage() {
               <Download className="w-4 h-4" /> Install
             </button>
           )}
-          <button onClick={toggleTheme} className={`p-2 rounded-full transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-200 hover:bg-slate-300'}`}>
+          <button onClick={toggleTheme} className={`p-2 rounded-full transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-200 hover:bg-slate-300 text-slate-800'}`}>
             {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
         </div>
       </nav>
 
+      {/* Main Content */}
       <motion.div 
         variants={containerVariants}
         initial="hidden"
@@ -94,6 +96,8 @@ export default function HomePage() {
               <Bus className="w-12 h-12" />
             </div>
           </div>
+          
+          {/* Title Fix */}
           <h1 className={`text-4xl md:text-5xl font-black tracking-tight mb-3 ${isDark ? 'bg-gradient-to-br from-white to-slate-400 bg-clip-text text-transparent' : 'text-slate-900'}`}>
             Biyahe Live
           </h1>
@@ -102,6 +106,7 @@ export default function HomePage() {
           </p>
         </motion.div>
 
+        {/* Role Cards */}
         <div className="space-y-4">
           <motion.div variants={itemVariants}>
             <Link href="/driver" className={`group block p-6 rounded-2xl transition-all duration-300 relative overflow-hidden ${isDark ? 'bg-[#111827] border-slate-800 hover:border-emerald-500/50' : 'bg-white border-slate-200 hover:border-emerald-500/50 hover:shadow-lg'}`}>
