@@ -1,149 +1,150 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { database, ensureAuth } from "@/lib/firebase";
-import { ref, set, remove, update } from "firebase/database";
-import { Navigation, Play, Square, Users, CheckCircle2, AlertCircle, RefreshCw, QrCode, Minus, Plus } from "lucide-react";
+import { Navigation, Bus, ArrowRight, Download, Sun, Moon } from "lucide-react";
+import { motion } from "framer-motion";
 
-export default function DriverPage() {
-  const [isLive, setIsLive] = useState(false);
-  const [status, setStatus] = useState<"Available" | "Standing" | "Full">("Available");
-  const [tripId, setTripId] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  
-  // Seat Counter State
-  const [seatsTotal] = useState(14);
-  const [seatsAvailable, setSeatsAvailable] = useState(14);
-
-  const watchIdRef = useRef<number | null>(null);
-  const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
+export default function HomePage() {
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstall, setShowInstall] = useState(false);
+  const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
-    const storedTripId = localStorage.getItem("biyahe_trip_id");
-    if (storedTripId) setTripId(storedTripId);
-    else {
-      const newTripId = "trip_" + Math.random().toString(36).substring(2, 9);
-      localStorage.setItem("biyahe_trip_id", newTripId);
-      setTripId(newTripId);
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "light") {
+      setIsDark(false);
+      document.documentElement.classList.remove("dark");
+    } else {
+      setIsDark(true);
+      document.documentElement.classList.add("dark");
     }
+
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstall(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  const pushLocationToFirebase = async (position: GeolocationPosition, currentStatus: string, currentSeats: number) => {
-    if (!tripId) return;
-    try {
-      await ensureAuth();
-      const currentCoords = { lat: position.coords.latitude, lng: position.coords.longitude };
-      setCoords(currentCoords);
-      const tripRef = ref(database, `live_trips/${tripId}`);
-      await set(tripRef, {
-        tripId,
-        status: currentStatus,
-        location: currentCoords,
-        seatsAvailable: currentSeats,
-        updatedAt: Date.now(),
-      });
-      setLastUpdated(new Date());
-      setErrorMessage(null);
-    } catch (err) {
-      setErrorMessage("Maling koneksyon sa internet.");
+  const toggleTheme = () => {
+    const newTheme = !isDark;
+    setIsDark(newTheme);
+    if (newTheme) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
     }
   };
 
-  const handleStartTrip = async () => {
-    if (!navigator.geolocation) return setErrorMessage("Walang Geolocation.");
-    setIsLive(true);
-    setErrorMessage(null);
-    try { await ensureAuth(); } catch (err) { return setErrorMessage("Hindi maka-login."); }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => pushLocationToFirebase(pos, status, seatsAvailable),
-      () => setErrorMessage("Paki-allow ang Location.")
-    );
-
-    let latestPos: GeolocationPosition | null = null;
-    watchIdRef.current = navigator.geolocation.watchPosition((pos) => {
-      latestPos = pos;
-      pushLocationToFirebase(pos, status, seatsAvailable);
-    });
-
-    intervalIdRef.current = setInterval(() => {
-      if (latestPos) pushLocationToFirebase(latestPos, status, seatsAvailable);
-    }, 10000);
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setShowInstall(false);
+    setDeferredPrompt(null);
   };
 
-  const handleEndTrip = async () => {
-    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
-    if (intervalIdRef.current !== null) clearInterval(intervalIdRef.current);
-    if (tripId) {
-      try {
-        await ensureAuth();
-        await remove(ref(database, `live_trips/${tripId}`));
-      } catch (err) { console.error(err); }
-    }
-    setIsLive(false); setCoords(null); setLastUpdated(null);
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.15 } }
   };
 
-  const updateSeats = async (delta: number) => {
-    const newSeats = Math.max(0, Math.min(seatsTotal, seatsAvailable + delta));
-    setSeatsAvailable(newSeats);
-    let newStatus: "Available" | "Standing" | "Full" = "Available";
-    if (newSeats === 0) newStatus = "Full";
-    else if (newSeats <= 3) newStatus = "Standing";
-    setStatus(newStatus);
-
-    if (isLive && tripId) {
-      try {
-        await ensureAuth();
-        await update(ref(database, `live_trips/${tripId}`), { seatsAvailable: newSeats, status: newStatus });
-      } catch (err) { console.error(err); }
-    }
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300 } }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-4 md:p-8 flex flex-col items-center justify-between relative">
+    <div className={`relative min-h-screen flex flex-col items-center justify-center p-6 overflow-hidden ${isDark ? 'text-white' : 'text-slate-900'}`}>
       
-      {/* Floating Scanner Button */}
-      {isLive && (
-        <Link href="/driver/scan" className="fixed bottom-6 right-6 z-50 p-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full shadow-2xl shadow-emerald-500/50 transition-all active:scale-95 flex items-center gap-2">
-          <QrCode className="w-6 h-6" />
-          <span className="font-bold pr-2">Scan Ticket</span>
-        </Link>
-      )}
+      {/* Premium Mesh Background with Animation */}
+      <div className="mesh-bg"></div>
 
-      <div className="w-full max-w-md text-center my-4">
-        <h1 className="text-2xl font-bold flex items-center justify-center gap-2"><Navigation className="w-8 h-8 text-emerald-400" /> BIYAHE LIVE - DRIVER</h1>
-      </div>
-
-      <div className="w-full max-w-md bg-slate-800 rounded-2xl p-6 shadow-xl border border-slate-700 space-y-6">
-        <div className={`p-4 rounded-xl flex items-center justify-between ${isLive ? 'bg-emerald-950/80 border-emerald-500/50' : 'bg-slate-700/50'}`}>
-          <div>
-            <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">TRIP STATUS</p>
-            <p className="font-bold text-lg">{isLive ? "LIVE BROADCASTING" : "OFFLINE"}</p>
-          </div>
-          {isLive && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
+      <nav className={`fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 transition-all ${isDark ? 'glass-panel' : 'glass-panel-light'}`}>
+        <div className="flex items-center gap-2">
+          <Bus className={`w-6 h-6 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+          <span className="font-bold tracking-tight">Biyahe Live</span>
         </div>
-
-        {errorMessage && <div className="p-3 bg-rose-950 text-rose-200 rounded-lg text-sm">{errorMessage}</div>}
-
-        {/* SEAT COUNTER */}
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
-          <p className="text-xs text-slate-400 text-center mb-3">AVAILABLE SEATS</p>
-          <div className="flex items-center justify-between">
-            <button onClick={() => updateSeats(-1)} className="p-4 bg-slate-800 hover:bg-slate-700 rounded-xl active:scale-95"><Minus className="w-6 h-6" /></button>
-            <span className="text-4xl font-black text-emerald-400">{seatsAvailable}</span>
-            <button onClick={() => updateSeats(1)} className="p-4 bg-slate-800 hover:bg-slate-700 rounded-xl active:scale-95"><Plus className="w-6 h-6" /></button>
-          </div>
+        <div className="flex items-center gap-3">
+          {showInstall && (
+            <button onClick={handleInstallClick} className="hidden md:flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 px-4 py-2 rounded-full font-semibold text-sm hover:bg-emerald-500 hover:text-white transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+              <Download className="w-4 h-4" /> Install
+            </button>
+          )}
+          <button onClick={toggleTheme} className={`p-2 rounded-full transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-200 hover:bg-slate-300'}`}>
+            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
         </div>
+      </nav>
 
-        {!isLive ? (
-          <button onClick={handleStartTrip} className="w-full py-5 bg-emerald-500 text-slate-950 font-black text-xl rounded-2xl">START TRIP</button>
-        ) : (
-          <button onClick={handleEndTrip} className="w-full py-5 bg-rose-600 text-white font-black text-xl rounded-2xl">END TRIP</button>
-        )}
-      </div>
+      <motion.div 
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+        className="z-10 w-full max-w-md mt-16"
+      >
+        <motion.div variants={itemVariants} className="text-center mb-12">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className={`p-4 rounded-3xl shadow-2xl ${isDark ? 'bg-emerald-950/80 border border-emerald-800/50 text-emerald-400 shadow-emerald-500/20' : 'bg-white border border-slate-200 text-emerald-600 shadow-md'}`}>
+              <Bus className="w-12 h-12" />
+            </div>
+          </div>
+          <h1 className={`text-4xl md:text-5xl font-black tracking-tight mb-3 ${isDark ? 'bg-gradient-to-br from-white to-slate-400 bg-clip-text text-transparent' : 'text-slate-900'}`}>
+            Biyahe Live
+          </h1>
+          <p className={`text-lg ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+            Davao Region Commuter Telemetry
+          </p>
+        </motion.div>
+
+        <div className="space-y-4">
+          <motion.div variants={itemVariants}>
+            <Link href="/driver" className={`group block p-6 rounded-2xl transition-all duration-300 relative overflow-hidden ${isDark ? 'bg-[#111827] border-slate-800 hover:border-emerald-500/50' : 'bg-white border-slate-200 hover:border-emerald-500/50 hover:shadow-lg'}`}>
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 to-emerald-500/10 group-hover:to-emerald-500/20 transition-all"></div>
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-xl shadow-inner ${isDark ? 'bg-emerald-950/80 border-emerald-800/50 text-emerald-400' : 'bg-emerald-50 border-emerald-100 text-emerald-600'}`}>
+                    <Navigation className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h2 className={`text-xl font-bold ${isDark ? 'text-white group-hover:text-emerald-400' : 'text-slate-900 group-hover:text-emerald-600'}`}>Driver / Conductor</h2>
+                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Start a trip and broadcast location</p>
+                  </div>
+                </div>
+                <ArrowRight className={`w-6 h-6 transition-all group-hover:translate-x-1 ${isDark ? 'text-slate-600 group-hover:text-emerald-400' : 'text-slate-400 group-hover:text-emerald-600'}`} />
+              </div>
+            </Link>
+          </motion.div>
+
+          <motion.div variants={itemVariants}>
+            <Link href="/commuter" className={`group block p-6 rounded-2xl transition-all duration-300 relative overflow-hidden ${isDark ? 'bg-[#111827] border-slate-800 hover:border-blue-500/50' : 'bg-white border-slate-200 hover:border-blue-500/50 hover:shadow-lg'}`}>
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 to-blue-500/10 group-hover:to-blue-500/20 transition-all"></div>
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-xl shadow-inner ${isDark ? 'bg-blue-950/80 border-blue-800/50 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
+                    <Bus className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h2 className={`text-xl font-bold ${isDark ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>Commuter</h2>
+                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>See approaching vehicles at your shed</p>
+                  </div>
+                </div>
+                <ArrowRight className={`w-6 h-6 transition-all group-hover:translate-x-1 ${isDark ? 'text-slate-600 group-hover:text-blue-400' : 'text-slate-400 group-hover:text-blue-600'}`} />
+              </div>
+            </Link>
+          </motion.div>
+        </div>
+      </motion.div>
+
+      <footer className={`fixed bottom-6 text-center text-xs transition-colors ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+        <p>Developed by Ray Mar Olandria</p>
+        <p className="mt-1">Biyahe Live © 2026</p>
+      </footer>
     </div>
   );
 }
