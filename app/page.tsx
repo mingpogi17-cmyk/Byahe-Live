@@ -98,9 +98,9 @@ export default function HomePage() {
           </div>
           
           {/* Title Fix */}
-          <h1 className={`text-4xl md:text-5xl font-black tracking-tight mb-3 ${isDark ? 'bg-gradient-to-br from-white to-slate-400 bg-clip-text text-transparent' : 'text-slate-900'}`}>
-            Biyahe Live
-          </h1>
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-3 text-slate-900 dark:text-transparent dark:bg-gradient-to-br dark:from-white dark:to-slate-400 dark:bg-clip-text">
+  Biyahe Live
+</h1>
           <p className={`text-lg ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
             Davao Region Commuter Telemetry
           </p>
