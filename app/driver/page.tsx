@@ -6,7 +6,7 @@ import { database, ensureAuth } from "@/lib/firebase";
 import { ref, set, remove, update, onValue } from "firebase/database";
 import { 
   Navigation, Play, Square, CheckCircle2, QrCode, Minus, Plus, 
-  ShieldAlert, Timer, Wallet, Power, AlertOctagon, Map, Siren, X
+  ShieldAlert, Timer, Wallet, Power, AlertOctagon, Map, Siren, X, Check
 } from "lucide-react";
 
 export default function DriverPage() {
@@ -23,6 +23,7 @@ export default function DriverPage() {
   const [isEmergency, setIsEmergency] = useState(false);
   
   const [sosAlert, setSosAlert] = useState<any>(null);
+  const [isSosAcknowledged, setIsSosAcknowledged] = useState(false);
 
   const [reservedSeats, setReservedSeats] = useState(2);
   const [isReservedActive, setIsReservedActive] = useState(false);
@@ -31,6 +32,50 @@ export default function DriverPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const alarmIntervalRef = useRef<any>(null);
+
+  // 🚨 SIREN SOUND FUNCTION
+  const playSiren = () => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    const ctx = audioCtxRef.current;
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.5);
+    
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+  };
+
+  const startAlarm = () => {
+    if (alarmIntervalRef.current) return;
+    playSiren();
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100]);
+    alarmIntervalRef.current = setInterval(() => {
+      playSiren();
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100]);
+    }, 1200); // Play every 1.2 seconds
+  };
+
+  const stopAlarm = () => {
+    if (alarmIntervalRef.current) {
+      clearInterval(alarmIntervalRef.current);
+      alarmIntervalRef.current = null;
+    }
+    if (navigator.vibrate) navigator.vibrate(0);
+  };
 
   useEffect(() => {
     const storedTripId = localStorage.getItem("biyahe_trip_id");
@@ -47,11 +92,20 @@ export default function DriverPage() {
     if (savedSeats) setSeatsAvailable(parseInt(savedSeats));
 
     const unsubSOS = onValue(ref(database, "sos_alert"), (snap) => {
-      if (snap.exists()) setSosAlert(snap.val());
-      else setSosAlert(null);
+      if (snap.exists()) {
+        setSosAlert(snap.val());
+        setIsSosAcknowledged(false);
+        startAlarm(); // 🚨 Trigger sound & vibration
+      } else {
+        setSosAlert(null);
+        stopAlarm(); // Stop sound if cleared
+      }
     });
 
-    return () => unsubSOS();
+    return () => {
+      unsubSOS();
+      stopAlarm();
+    };
   }, []);
 
   useEffect(() => {
@@ -173,6 +227,11 @@ export default function DriverPage() {
     }
   };
 
+  const handleAcknowledge = () => {
+    setIsSosAcknowledged(true);
+    stopAlarm();
+  };
+
   const dismissSOS = async () => {
     try { await remove(ref(database, "sos_alert")); } catch (err) { console.error(err); }
   };
@@ -186,18 +245,32 @@ export default function DriverPage() {
   return (
     <div className={`min-h-screen bg-slate-900 text-white p-4 md:p-8 flex flex-col items-center justify-between relative ${isEmergency ? 'bg-rose-950' : ''}`}>
       
+      {/* 🚨 SOS ALERT BANNER */}
       {sosAlert && (
-        <div className="fixed top-0 left-0 w-full z-[100] bg-rose-600 p-4 flex items-center justify-between animate-pulse shadow-2xl">
-          <div className="flex items-center gap-3 text-white">
-            <Siren className="w-8 h-8 animate-bounce" />
-            <div>
-              <p className="font-black text-lg">SOS ALERT!</p>
-              <p className="text-xs font-semibold">Location: {sosAlert.shed}</p>
+        <div className={`fixed top-0 left-0 w-full z-[100] p-4 flex flex-col gap-3 shadow-2xl transition-all ${isSosAcknowledged ? 'bg-rose-950 border-b border-rose-600' : 'bg-rose-600 animate-pulse'}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 text-white">
+              <Siren className={`w-8 h-8 ${!isSosAcknowledged && 'animate-bounce'}`} />
+              <div>
+                <p className="font-black text-lg">SOS ALERT!</p>
+                <p className="text-xs font-semibold">Location: {sosAlert.shed}</p>
+              </div>
             </div>
+            <button onClick={dismissSOS} className="p-2 bg-black/20 rounded-full text-white hover:bg-black/40 transition">
+              <X className="w-6 h-6" />
+            </button>
           </div>
-          <button onClick={dismissSOS} className="p-2 bg-black/20 rounded-full text-white hover:bg-black/40 transition">
-            <X className="w-6 h-6" />
-          </button>
+          
+          {!isSosAcknowledged && (
+            <div className="flex gap-2 mt-1">
+              <button onClick={handleAcknowledge} className="flex-1 py-2 bg-white text-rose-700 font-bold text-sm rounded-lg shadow hover:bg-slate-100 transition flex items-center justify-center gap-1">
+                <Check className="w-4 h-4" /> TUGON (Acknowledge)
+              </button>
+              <a href="tel:911" className="flex-1 py-2 bg-slate-950 text-white font-bold text-sm rounded-lg shadow hover:bg-black transition text-center">
+                CALL 911
+              </a>
+            </div>
+          )}
         </div>
       )}
 
