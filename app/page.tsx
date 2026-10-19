@@ -7,8 +7,58 @@ import { ref, onValue, set, remove } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Ticket, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, CloudRain, Bell, BellRing, Wallet, Siren, Award
+  Share2, CloudRain, Bell, BellRing, Wallet, Siren, Award, Globe
 } from "lucide-react";
+
+// === LANGUAGE DICTIONARY ===
+const LANG = {
+  fil: {
+    approaching: "PAPARATING NA SASAKYAN",
+    noTrips: "Walang biyahe sa malapit",
+    refreshMsg: "Mag-refresh mamaya o mag-report kung may dumaan.",
+    seats: "upuan",
+    standing: "Tayo Lang",
+    full: "Puno Na",
+    isCorrect: "Tama ba ito?",
+    yes: "Tama",
+    no: "Mali",
+    report: "Report",
+    ticket: "Ticket",
+    justNow: "Ngayon lang",
+    minsAgo: "min ang nakalipas",
+    puvLabel: "Van / Bus #",
+    updated: "Na-update",
+    setAlarm: "Set Alarm",
+    alarmOn: "Alarm On",
+    share: "Share",
+    sosTitle: "Kumpirmahin ang SOS",
+    sosDesc: "I-tap ang 'Send SOS' kung may emergency.",
+    sosBtn: "SEND SOS NOW",
+  },
+  en: {
+    approaching: "APPROACHING VEHICLES",
+    noTrips: "No trips nearby",
+    refreshMsg: "Refresh later or report if one passes by.",
+    seats: "seats",
+    standing: "Standing",
+    full: "Full",
+    isCorrect: "Is this correct?",
+    yes: "Yes",
+    no: "No",
+    report: "Report",
+    ticket: "Ticket",
+    justNow: "Just now",
+    minsAgo: "mins ago",
+    puvLabel: "Van / Bus #",
+    updated: "Updated",
+    setAlarm: "Set Alarm",
+    alarmOn: "Alarm On",
+    share: "Share",
+    sosTitle: "Confirm SOS",
+    sosDesc: "Tap 'Send SOS' if there is an emergency.",
+    sosBtn: "SEND SOS NOW",
+  }
+};
 
 interface TripData {
   tripId: string;
@@ -37,13 +87,10 @@ interface Shed {
 }
 
 const SHEDS: Shed[] = [
-  // Davao City Areas
   { id: "toril", name: "Toril", lat: 7.0153, lng: 125.4922 },
   { id: "mintal", name: "Mintal", lat: 7.0997, lng: 125.5885 },
   { id: "calinan", name: "Calinan", lat: 7.1861, lng: 125.4552 },
   { id: "bunawan", name: "Bunawan", lat: 7.2947, lng: 125.6941 },
-
-  // Davao del Sur (South Bound)
   { id: "sta_cruz", name: "Sta. Cruz", lat: 6.8342, lng: 125.4149 },
   { id: "digos", name: "Digos City", lat: 6.7497, lng: 125.3572 },
   { id: "guihing", name: "Guihing", lat: 6.68444, lng: 125.3525 },
@@ -54,8 +101,6 @@ const SHEDS: Shed[] = [
   { id: "bansalan", name: "Bansalan", lat: 6.78611, lng: 125.21333 },
   { id: "sta_maria", name: "Sta. Maria", lat: 6.5536, lng: 125.4708 },
   { id: "malita", name: "Malita", lat: 6.4097, lng: 125.6122 },
-
-  // Davao del Norte (North Bound)
   { id: "panabo", name: "Panabo City", lat: 7.3079, lng: 125.6841 },
   { id: "carmen", name: "Carmen", lat: 7.2095, lng: 125.7055 },
   { id: "tagum", name: "Tagum City", lat: 7.4478, lng: 125.8072 },
@@ -63,12 +108,8 @@ const SHEDS: Shed[] = [
   { id: "asuncion", name: "Asuncion", lat: 7.5386, lng: 125.7508 },
   { id: "kapalong", name: "Kapalong", lat: 7.5854, lng: 125.7052 },
   { id: "new_corella", name: "New Corella", lat: 7.5866, lng: 125.8237 },
-
-  // Davao de Oro (Further North)
   { id: "maco", name: "Maco", lat: 7.3619, lng: 125.8553 },
   { id: "mabini", name: "Mabini", lat: 7.3092, lng: 125.8556 },
-
-  // Samal / Island
   { id: "babak", name: "Babak (IGACOS)", lat: 7.1347, lng: 125.6837 },
   { id: "samal", name: "Samal City", lat: 7.0733, lng: 125.7083 },
 ];
@@ -103,10 +144,16 @@ export default function HomePage() {
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardStep, setOnboardStep] = useState(0);
+  const [language, setLanguage] = useState<"fil" | "en">("fil");
+
+  const t = LANG[language];
 
   useEffect(() => {
     const savedPoints = localStorage.getItem("biyahe_points");
     if (savedPoints) setPoints(parseInt(savedPoints));
+
+    const savedLang = localStorage.getItem("biyahe_lang") as "fil" | "en";
+    if (savedLang) setLanguage(savedLang);
 
     const hasOnboarded = localStorage.getItem("biyahe_onboarded");
     if (!hasOnboarded) setShowOnboarding(true);
@@ -114,6 +161,10 @@ export default function HomePage() {
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("biyahe_lang", language);
+  }, [language]);
 
   useEffect(() => {
     const savedShedId = localStorage.getItem("favorite_shed");
@@ -313,6 +364,10 @@ export default function HomePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* LANGUAGE TOGGLE */}
+          <button onClick={() => setLanguage(language === "fil" ? "en" : "fil")} className="flex items-center gap-1 bg-slate-800 border border-slate-700 text-slate-300 px-2 py-1.5 rounded-full text-xs font-semibold hover:bg-slate-700 transition-all">
+            <Globe className="w-3.5 h-3.5" /> {language.toUpperCase()}
+          </button>
           <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-1 rounded-full text-xs font-bold">
             <Award className="w-3.5 h-3.5" /> {points} pts
           </div>
@@ -355,14 +410,14 @@ export default function HomePage() {
           <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
             <span className="text-xs text-slate-500 flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              {getMinutesAgo(lastRefresh) === 0 ? "Ngayon lang" : `${getMinutesAgo(lastRefresh)} min`}
+              {getMinutesAgo(lastRefresh) === 0 ? t.justNow : `${getMinutesAgo(lastRefresh)} ${t.minsAgo}`}
             </span>
             <div className="flex items-center gap-2">
               <Link href="/commuter/ticket" className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 rounded-lg text-xs font-bold hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-1">
-                <Ticket className="w-3 h-3" /> Ticket
+                <Ticket className="w-3 h-3" /> {t.ticket}
               </Link>
               <button onClick={() => setShowReportModal(true)} className="px-3 py-1 bg-amber-500/10 border border-amber-500/50 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500 hover:text-white transition-all flex items-center gap-1">
-                <Megaphone className="w-3 h-3" /> Report
+                <Megaphone className="w-3 h-3" /> {t.report}
               </button>
               <button onClick={handleManualRefresh} className={`p-1.5 rounded-lg hover:bg-slate-800 transition-all ${loading ? 'animate-spin text-emerald-400' : 'text-slate-400'}`}>
                 <RefreshCw className="w-4 h-4" />
@@ -401,15 +456,15 @@ export default function HomePage() {
         {!loading && sortedAndFilteredTrips.length === 0 && !errorMsg && (
           <div className="py-12 px-6 bg-slate-900 rounded-2xl border border-slate-800 text-center space-y-3">
             <Bus className="w-12 h-12 text-slate-600 mx-auto" />
-            <p className="font-bold text-slate-300">Walang biyahe sa malapit</p>
-            <p className="text-xs text-slate-500">Mag-refresh mamaya o mag-report kung may dumaan.</p>
+            <p className="font-bold text-slate-300">{t.noTrips}</p>
+            <p className="text-xs text-slate-500">{t.refreshMsg}</p>
           </div>
         )}
 
         {!loading && sortedAndFilteredTrips.length > 0 && (
           <div className="space-y-3 pb-20">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
-              PAPARATING SA {selectedShed.name.toUpperCase()} ({sortedAndFilteredTrips.length})
+              {t.approaching} {selectedShed.name.toUpperCase()} ({sortedAndFilteredTrips.length})
             </p>
 
             {sortedAndFilteredTrips.map((trip) => {
@@ -429,7 +484,7 @@ export default function HomePage() {
                       <div className="p-2 bg-emerald-950/60 rounded-xl border border-emerald-800/40 text-emerald-400"><Bus className="w-5 h-5" /></div>
                       <div>
                         <h2 className="font-bold text-base flex items-center gap-1.5">
-                          Van / Bus #{trip.tripId.slice(-4).toUpperCase()}
+                          {t.puvLabel}{trip.tripId.slice(-4).toUpperCase()}
                           {trip.isVerified && <ShieldCheck className="w-4 h-4 text-blue-400" />}
                         </h2>
                         <span className="text-[11px] text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> {distance.toFixed(1)} km away</span>
@@ -437,7 +492,7 @@ export default function HomePage() {
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold border ${trip.status === "Available" ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60" : trip.status === "Standing" ? "bg-amber-950/80 text-amber-300 border-amber-700/60" : "bg-rose-950/80 text-rose-300 border-rose-700/60"}`}>
-                        {trip.status === "Available" ? `${trip.seatsAvailable ?? '?'} upuan` : trip.status === "Standing" ? "Tayo Lang" : "Puno Na"}
+                        {trip.status === "Available" ? `${trip.seatsAvailable ?? '?'} ${t.seats}` : trip.status === "Standing" ? t.standing : t.full}
                       </span>
                       <span className="text-[10px] font-bold text-amber-400 flex items-center gap-0.5">
                         <Wallet className="w-3 h-3" /> {fareDisplay}
@@ -446,25 +501,25 @@ export default function HomePage() {
                   </div>
                   
                   <div className="flex items-center justify-between pt-3 border-t border-slate-800/80 text-xs text-slate-400">
-                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {minsAgo === 0 ? "Ngayon lang" : `${minsAgo} min`}</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {minsAgo === 0 ? t.justNow : `${minsAgo} ${t.minsAgo}`}</span>
                     <div className="flex items-center gap-3">
                       <button onClick={() => toggleAlarm(trip.tripId)} className={`flex items-center gap-1 transition-colors ${hasAlarm ? 'text-amber-400 font-bold' : 'text-slate-500 hover:text-slate-300'}`}>
                         {hasAlarm ? <BellRing className="w-3.5 h-3.5 animate-pulse" /> : <Bell className="w-3.5 h-3.5" />}
-                        {hasAlarm ? "Alarm On" : "Set Alarm"}
+                        {hasAlarm ? t.alarmOn : t.setAlarm}
                       </button>
                       <button onClick={() => handleShare(trip)} className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-semibold transition-colors">
-                        <Share2 className="w-3.5 h-3.5" /> Share
+                        <Share2 className="w-3.5 h-3.5" /> {t.share}
                       </button>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-800/80">
-                    <span className="text-[10px] text-slate-500">Tama ba ito?</span>
+                    <span className="text-[10px] text-slate-500">{t.isCorrect}</span>
                     <button disabled={isReported} onClick={() => handleReport(trip.tripId, "correct")} className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${isReported ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-950/50 border border-emerald-800/50 text-emerald-400 hover:bg-emerald-500 hover:text-white'}`}>
-                      👍 Tama ({trip.reports?.correct ?? 0})
+                      👍 {t.yes} ({trip.reports?.correct ?? 0})
                     </button>
                     <button disabled={isReported} onClick={() => handleReport(trip.tripId, "wrong")} className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${isReported ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-rose-950/50 border border-rose-800/50 text-rose-400 hover:bg-rose-500 hover:text-white'}`}>
-                      👎 Mali ({trip.reports?.wrong ?? 0})
+                      👎 {t.no} ({trip.reports?.wrong ?? 0})
                     </button>
                   </div>
                 </div>
@@ -504,11 +559,11 @@ export default function HomePage() {
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200 text-center">
             <Siren className="w-16 h-16 text-rose-500 mx-auto mb-4 animate-pulse" />
-            <h2 className="text-2xl font-black text-white mb-2">Kumpirmahin ang SOS</h2>
-            <p className="text-sm text-rose-200 mb-6">I-tap ang "Send SOS" kung may emergency.</p>
+            <h2 className="text-2xl font-black text-white mb-2">{t.sosTitle}</h2>
+            <p className="text-sm text-rose-200 mb-6">{t.sosDesc}</p>
             <div className="space-y-3">
               <button onClick={triggerSOS} className="w-full py-4 bg-rose-600 text-white font-black text-lg rounded-xl shadow-lg hover:bg-rose-500 transition-all">
-                SEND SOS NOW
+                {t.sosBtn}
               </button>
               <button onClick={() => setShowSosModal(false)} className="w-full py-3 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-all">
                 Cancel
@@ -528,7 +583,7 @@ export default function HomePage() {
                   <Bus className="w-12 h-12 text-emerald-400" />
                 </div>
                 <h2 className="text-2xl font-black text-white mb-2">Welcome sa Biyahe Live!</h2>
-                <p className="text-sm text-slate-400 mb-8">Ang iyong kasama sa pag-commute sa Davao Region. Alam mo na bago ka pa umabang.</p>
+                <p className="text-sm text-slate-400 mb-8">Ang iyong kasama sa pag-commute sa Davao Region.</p>
               </>
             )}
 
