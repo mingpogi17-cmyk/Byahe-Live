@@ -4,54 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { database, ensureAuth } from "@/lib/firebase";
 import { ref, set, remove, update } from "firebase/database";
-import { Navigation, Play, Square, CheckCircle2, QrCode, Minus, Plus, Volume2, ShieldAlert, Timer, Globe } from "lucide-react";
-
-// === LANGUAGE DICTIONARY ===
-const LANG = {
-  fil: {
-    startTrip: "START TRIP",
-    endTrip: "END TRIP",
-    availableSeats: "AVAILABLE SEATS",
-    tripStatus: "TRIP STATUS",
-    live: "LIVE BROADCASTING",
-    offline: "OFFLINE",
-    reservedSeats: "Reserved Seats (Walk-ins)",
-    reservedDesc: "Para sa mga walang cellphone",
-    timer: "Timer",
-    voiceOn: "Voice: Filipino | Vibration: ON",
-    scanTicket: "Scan Ticket",
-    speakStart: "Simula na ang biyahe.",
-    speakEnd: "Tapos na ang biyahe.",
-    speakFull: "Puno na ang sasakyan.",
-    speakStanding: "Tatlo na lang ang bakanteng upuan.",
-    speakAvailable: "May bakanteng upuan.",
-    speakReservedOn: "Dalawang upuan ang naka-reserve. May tatlong minuto.",
-    speakReservedOff: "Tapos na ang reserved seats.",
-  },
-  en: {
-    startTrip: "START TRIP",
-    endTrip: "END TRIP",
-    availableSeats: "AVAILABLE SEATS",
-    tripStatus: "TRIP STATUS",
-    live: "LIVE BROADCASTING",
-    offline: "OFFLINE",
-    reservedSeats: "Reserved Seats (Walk-ins)",
-    reservedDesc: "For passengers without phones",
-    timer: "Timer",
-    voiceOn: "Voice: English | Vibration: ON",
-    scanTicket: "Scan Ticket",
-    speakStart: "Trip started.",
-    speakEnd: "Trip ended.",
-    speakFull: "Bus is full.",
-    speakStanding: "Only three seats left.",
-    speakAvailable: "Seats available.",
-    speakReservedOn: "Two reserved seats. Three minutes.",
-    speakReservedOff: "Reserved seats expired.",
-  }
-};
+import { Navigation, Play, Square, CheckCircle2, QrCode, Minus, Plus, ShieldAlert, Timer } from "lucide-react";
 
 export default function DriverPage() {
-  const [language, setLanguage] = useState<"fil" | "en">("fil");
   const [isLive, setIsLive] = useState(false);
   const [status, setStatus] = useState<"Available" | "Standing" | "Full">("Available");
   const [tripId, setTripId] = useState<string | null>(null);
@@ -63,14 +18,9 @@ export default function DriverPage() {
   const [isReservedActive, setIsReservedActive] = useState(false);
   const [reservedTimer, setReservedTimer] = useState(0);
   
-  // Visual Flasher State (Para sa mga bingi)
-  const [flashScreen, setFlashScreen] = useState(false);
-
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
-
-  const t = LANG[language]; // Helper para sa text
 
   useEffect(() => {
     const storedTripId = localStorage.getItem("biyahe_trip_id");
@@ -83,48 +33,23 @@ export default function DriverPage() {
 
     const savedLive = localStorage.getItem("biyahe_is_live");
     const savedSeats = localStorage.getItem("biyahe_seats");
-    const savedLang = localStorage.getItem("biyahe_lang") as "fil" | "en";
     if (savedLive === "true") setIsLive(true);
     if (savedSeats) setSeatsAvailable(parseInt(savedSeats));
-    if (savedLang) setLanguage(savedLang);
   }, []);
 
   useEffect(() => {
     localStorage.setItem("biyahe_is_live", isLive.toString());
     localStorage.setItem("biyahe_seats", seatsAvailable.toString());
-    localStorage.setItem("biyahe_lang", language);
-  }, [isLive, seatsAvailable, language]);
+  }, [isLive, seatsAvailable]);
 
-  const speak = (text: string) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = language === "fil" ? 'fil-PH' : 'en-US';
-      utterance.rate = 0.9;
-      window.speechSynthesis.speak(utterance);
+  // Vibration feedback lang (walang voice, walang flash)
+  const triggerVibration = (type: "available" | "standing" | "full") => {
+    if (navigator.vibrate) {
+      if (type === "available") navigator.vibrate(50);
+      else if (type === "standing") navigator.vibrate([50, 50, 50]);
+      else if (type === "full") navigator.vibrate([100, 50, 100, 50, 100]);
     }
   };
-
-  // Haptic Patterns & Visual Flasher
-  const triggerFeedback = (type: "available" | "standing" | "full") => {
-    if (type === "available") {
-      if (navigator.vibrate) navigator.vibrate(50);
-    } else if (type === "standing") {
-      if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
-      flashScreenColor("amber");
-    } else if (type === "full") {
-      if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
-      flashScreenColor("rose");
-    }
-  };
-
-  const flashScreenColor = (color: string) => {
-    setFlashScreen(true);
-    setTimeout(() => setFlashScreen(false), 500); // Flash for 500ms
-  };
-
-  // ... (pushLocationToFirebase, handleStartTrip, handleEndTrip, updateSeats, toggleReservedSeats functions same as before)
-  // 👇 (Palitan mo lang yung speak() calls sa loob ng functions na 'yon gamit ang `t` dictionary)
 
   const pushLocationToFirebase = async (position: GeolocationPosition, currentStatus: string, currentSeats: number, currentReserved: number) => {
     if (!tripId) return;
@@ -145,7 +70,6 @@ export default function DriverPage() {
   const handleStartTrip = async () => {
     if (!navigator.geolocation) return setErrorMessage("Walang Geolocation.");
     setIsLive(true); setErrorMessage(null);
-    speak(t.speakStart);
     try { await ensureAuth(); } catch (err) { return setErrorMessage("Hindi maka-login."); }
 
     navigator.geolocation.getCurrentPosition(
@@ -175,7 +99,6 @@ export default function DriverPage() {
     setIsReservedActive(false);
     localStorage.removeItem("biyahe_is_live");
     localStorage.removeItem("biyahe_seats");
-    speak(t.speakEnd);
   };
 
   const updateSeats = async (delta: number) => {
@@ -187,12 +110,8 @@ export default function DriverPage() {
     else if (newSeats <= 3) newStatus = "Standing";
     setStatus(newStatus);
 
-    // Visual & Haptic Feedback
-    triggerFeedback(newStatus.toLowerCase() as any);
-    
-    if (newStatus === "Full") speak(t.speakFull);
-    else if (newStatus === "Standing") speak(t.speakStanding);
-    else speak(t.speakAvailable);
+    // Vibration lang
+    triggerVibration(newStatus.toLowerCase() as any);
 
     if (isLive && tripId) {
       try { await ensureAuth(); await update(ref(database, `live_trips/${tripId}`), { seatsAvailable: newSeats, status: newStatus }); } catch (err) { console.error(err); }
@@ -204,18 +123,14 @@ export default function DriverPage() {
       setIsReservedActive(false);
       if (timerRef.current !== null) clearInterval(timerRef.current);
       setReservedTimer(0);
-      speak(t.speakReservedOff);
     } else {
       setIsReservedActive(true);
       setReservedTimer(180);
-      speak(t.speakReservedOn);
-      
       timerRef.current = setInterval(() => {
         setReservedTimer(prev => {
           if (prev <= 1) {
             if (timerRef.current !== null) clearInterval(timerRef.current);
             setIsReservedActive(false);
-            speak(t.speakReservedOff);
             return 0;
           }
           return prev - 1;
@@ -231,39 +146,34 @@ export default function DriverPage() {
   };
 
   return (
-    <div className={`min-h-screen bg-slate-900 text-white p-4 md:p-8 flex flex-col items-center justify-between relative transition-colors duration-300 ${flashScreen ? 'bg-rose-900/50' : ''}`}>
+    <div className="min-h-screen bg-slate-900 text-white p-4 md:p-8 flex flex-col items-center justify-between relative">
       
       {isLive && (
         <Link href="/driver/scan" className="fixed bottom-24 right-6 z-50 p-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full shadow-2xl transition-all flex items-center gap-2">
-          <QrCode className="w-6 h-6" /><span className="font-bold pr-2">{t.scanTicket}</span>
+          <QrCode className="w-6 h-6" /><span className="font-bold pr-2">Scan Ticket</span>
         </Link>
       )}
 
-      <div className="w-full max-w-md text-center my-4 flex items-center justify-between">
+      <div className="w-full max-w-md text-center my-4">
         <h1 className="text-2xl font-bold flex items-center justify-center gap-2">
-          <Navigation className="w-8 h-8 text-emerald-400" /> BIYAHE LIVE
+          <Navigation className="w-8 h-8 text-emerald-400" /> BIYAHE LIVE - DRIVER
         </h1>
-        {/* Language Toggle */}
-        <button onClick={() => setLanguage(language === "fil" ? "en" : "fil")} className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-full text-xs font-bold hover:bg-slate-700 transition-all">
-          <Globe className="w-4 h-4" /> {language.toUpperCase()}
-        </button>
       </div>
 
       <div className="w-full max-w-md bg-slate-800 rounded-2xl p-6 shadow-xl border border-slate-700 space-y-6">
         <div className={`p-4 rounded-xl flex items-center justify-between ${isLive ? 'bg-emerald-950/80 border-emerald-500/50' : 'bg-slate-700/50'}`}>
-          <div><p className="text-xs text-slate-400 uppercase font-semibold">{t.tripStatus}</p><p className="font-bold text-lg">{isLive ? t.live : t.offline}</p></div>
+          <div><p className="text-xs text-slate-400 uppercase font-semibold">TRIP STATUS</p><p className="font-bold text-lg">{isLive ? "LIVE BROADCASTING" : "OFFLINE"}</p></div>
           {isLive && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
         </div>
         {errorMessage && <div className="p-3 bg-rose-950 text-rose-200 rounded-lg text-sm">{errorMessage}</div>}
         
         <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
-          <p className="text-xs text-slate-400 text-center mb-3">{t.availableSeats}</p>
+          <p className="text-xs text-slate-400 text-center mb-3">AVAILABLE SEATS</p>
           <div className="flex items-center justify-between">
             <button onClick={() => updateSeats(-1)} className="p-4 bg-slate-800 hover:bg-slate-700 rounded-xl active:scale-95"><Minus className="w-6 h-6" /></button>
             <span className={`text-4xl font-black ${seatsAvailable === 0 ? 'text-rose-500' : seatsAvailable <= 3 ? 'text-amber-400' : 'text-emerald-400'}`}>{seatsAvailable}</span>
             <button onClick={() => updateSeats(1)} className="p-4 bg-slate-800 hover:bg-slate-700 rounded-xl active:scale-95"><Plus className="w-6 h-6" /></button>
           </div>
-          <p className="text-center text-[10px] text-slate-500 mt-2">{t.voiceOn}</p>
         </div>
 
         <div className={`p-4 rounded-xl border transition-all ${isReservedActive ? 'bg-amber-950/50 border-amber-500/50' : 'bg-slate-900 border-slate-700'}`}>
@@ -271,8 +181,8 @@ export default function DriverPage() {
             <div className="flex items-center gap-2">
               <ShieldAlert className={`w-5 h-5 ${isReservedActive ? 'text-amber-400' : 'text-slate-500'}`} />
               <div>
-                <p className="text-sm font-bold">{t.reservedSeats}</p>
-                <p className="text-[10px] text-slate-500">{t.reservedDesc}</p>
+                <p className="text-sm font-bold">Reserved Seats (Walk-ins)</p>
+                <p className="text-[10px] text-slate-500">Para sa mga walang cellphone</p>
               </div>
             </div>
             <button onClick={toggleReservedSeats} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isReservedActive ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
@@ -282,16 +192,16 @@ export default function DriverPage() {
           
           {isReservedActive && (
             <div className="mt-3 pt-3 border-t border-amber-800/30 flex items-center justify-between">
-              <span className="text-xs text-amber-300 flex items-center gap-1"><Timer className="w-3 h-3" /> {t.timer}:</span>
+              <span className="text-xs text-amber-300 flex items-center gap-1"><Timer className="w-3 h-3" /> Timer:</span>
               <span className="font-mono text-lg font-bold text-amber-400">{formatTime(reservedTimer)}</span>
             </div>
           )}
         </div>
 
         {!isLive ? (
-          <button onClick={handleStartTrip} className="w-full py-5 bg-emerald-500 text-slate-950 font-black text-xl rounded-2xl">{t.startTrip}</button>
+          <button onClick={handleStartTrip} className="w-full py-5 bg-emerald-500 text-slate-950 font-black text-xl rounded-2xl">START TRIP</button>
         ) : (
-          <button onClick={handleEndTrip} className="w-full py-5 bg-rose-600 text-white font-black text-xl rounded-2xl">{t.endTrip}</button>
+          <button onClick={handleEndTrip} className="w-full py-5 bg-rose-600 text-white font-black text-xl rounded-2xl">END TRIP</button>
         )}
       </div>
     </div>
