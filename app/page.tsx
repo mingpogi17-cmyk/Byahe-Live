@@ -75,10 +75,17 @@ export default function HomePage() {
 
   const [points, setPoints] = useState(0);
   const [showSosModal, setShowSosModal] = useState(false);
+  const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardStep, setOnboardStep] = useState(0);
 
   useEffect(() => {
     const savedPoints = localStorage.getItem("biyahe_points");
     if (savedPoints) setPoints(parseInt(savedPoints));
+
+    const hasOnboarded = localStorage.getItem("biyahe_onboarded");
+    if (!hasOnboarded) setShowOnboarding(true);
 
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
@@ -141,7 +148,7 @@ export default function HomePage() {
 
   const sortedAndFilteredTrips = useMemo(() => {
     const nearbyTrips = trips.filter(trip => {
-      if (trip.isOutOfService) return false; 
+      if (trip.isOutOfService || !trip.location || !trip.location.lat) return false; 
       const distance = getDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
       return distance <= 15;
     });
@@ -169,6 +176,11 @@ export default function HomePage() {
   };
 
   const handleReport = async (tripId: string, type: "correct" | "wrong") => {
+    if (reportedTrips[tripId]) {
+      alert("Naka-report ka na para sa sasakyang ito.");
+      return;
+    }
+
     try {
       const trip = trips.find(t => t.tripId === tripId);
       const currentReports = trip?.reports || { correct: 0, wrong: 0 };
@@ -182,6 +194,7 @@ export default function HomePage() {
       const newPoints = points + 5;
       setPoints(newPoints);
       localStorage.setItem("biyahe_points", newPoints.toString());
+      setReportedTrips(prev => ({ ...prev, [tripId]: true }));
     } catch (err) { console.error(err); }
   };
 
@@ -218,7 +231,7 @@ export default function HomePage() {
     }
   };
 
-    const triggerSOS = async () => {
+  const triggerSOS = async () => {
     try {
       await set(ref(database, "sos_alert"), { 
         id: "sos_" + Date.now(), 
@@ -228,12 +241,17 @@ export default function HomePage() {
       setShowSosModal(false);
       if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
       alert("SOS Sent! Na-notify na ang mga driver at authorities sa area.");
-    } catch (err) {
-      console.error(err);
-      // Idinagdag ito para may feedback kahit mag-fail
-      alert("Hindi ma-send ang SOS. Paki-check ang iyong internet connection.");
-      setShowSosModal(false); 
-    }
+    } catch (err) { console.error(err); }
+  };
+
+  const handleFinishOnboarding = () => {
+    localStorage.setItem("biyahe_onboarded", "true");
+    setShowOnboarding(false);
+  };
+
+  const handleNextOnboard = () => {
+    if (onboardStep < 2) setOnboardStep(prev => prev + 1);
+    else handleFinishOnboarding();
   };
 
   const alertStyles = (type: string) => {
@@ -375,6 +393,7 @@ export default function HomePage() {
               const isLowTrust = trustScore < -2;
               const hasAlarm = alarms[trip.tripId];
               const fareDisplay = trip.fare ? `₱${trip.fare}` : "₱15";
+              const isReported = reportedTrips[trip.tripId];
 
               return (
                 <div key={trip.tripId} className={`p-5 rounded-2xl border transition-all ${isStale || isLowTrust ? "opacity-40 grayscale" : "bg-slate-900 border-slate-800 shadow-md"}`}>
@@ -414,8 +433,12 @@ export default function HomePage() {
 
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-800/80">
                     <span className="text-[10px] text-slate-500">Tama ba ito?</span>
-                    <button onClick={() => handleReport(trip.tripId, "correct")} className="px-2 py-1 bg-emerald-950/50 border border-emerald-800/50 text-emerald-400 rounded-lg text-[10px] font-bold hover:bg-emerald-500 hover:text-white transition-all">👍 Tama ({trip.reports?.correct ?? 0})</button>
-                    <button onClick={() => handleReport(trip.tripId, "wrong")} className="px-2 py-1 bg-rose-950/50 border border-rose-800/50 text-rose-400 rounded-lg text-[10px] font-bold hover:bg-rose-500 hover:text-white transition-all">👎 Mali ({trip.reports?.wrong ?? 0})</button>
+                    <button disabled={isReported} onClick={() => handleReport(trip.tripId, "correct")} className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${isReported ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-950/50 border border-emerald-800/50 text-emerald-400 hover:bg-emerald-500 hover:text-white'}`}>
+                      👍 Tama ({trip.reports?.correct ?? 0})
+                    </button>
+                    <button disabled={isReported} onClick={() => handleReport(trip.tripId, "wrong")} className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${isReported ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-rose-950/50 border border-rose-800/50 text-rose-400 hover:bg-rose-500 hover:text-white'}`}>
+                      👎 Mali ({trip.reports?.wrong ?? 0})
+                    </button>
                   </div>
                 </div>
               );
@@ -424,8 +447,11 @@ export default function HomePage() {
         )}
       </main>
 
-      <footer className="text-center text-xs text-slate-500 my-8 pb-16">
-        Biyahe Live © 2026 · Developed by Ray Mar Olandria
+      <footer className="text-center text-xs text-slate-500 my-8 pb-16 flex flex-col items-center gap-2">
+        <p>Biyahe Live © 2026 · Developed by Ray Mar Olandria</p>
+        <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline transition-colors">
+          Privacy Policy & Terms of Service
+        </Link>
       </footer>
 
       {showReportModal && (
@@ -460,6 +486,59 @@ export default function HomePage() {
               <button onClick={() => setShowSosModal(false)} className="w-full py-3 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-all">
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ONBOARDING MODAL - FIXED */}
+      {showOnboarding && (
+        <div className="fixed inset-0 z-[200] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-in zoom-in duration-300 text-center flex flex-col items-center">
+            
+            {onboardStep === 0 && (
+              <>
+                <div className="p-4 bg-emerald-950/80 rounded-full mb-6 border border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
+                  <Bus className="w-12 h-12 text-emerald-400" />
+                </div>
+                <h2 className="text-2xl font-black text-white mb-2">Welcome sa Biyahe Live!</h2>
+                <p className="text-sm text-slate-400 mb-8">Ang iyong kasama sa pag-commute sa Davao. Alam mo na bago ka pa umabang.</p>
+              </>
+            )}
+
+            {onboardStep === 1 && (
+              <>
+                <div className="p-4 bg-amber-950/80 rounded-full mb-6 border border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.3)]">
+                  <Wallet className="w-12 h-12 text-amber-400" />
+                </div>
+                <h2 className="text-2xl font-black text-white mb-2">Mabilis at Madali</h2>
+                <p className="text-sm text-slate-400 mb-8">Kumuha ng QR Ticket para sa priority seat, mag-report ng sitwasyon, at makakuha ng Biyahe Points para sa rewards!</p>
+              </>
+            )}
+
+            {onboardStep === 2 && (
+              <>
+                <div className="p-4 bg-rose-950/80 rounded-full mb-6 border border-rose-500/50 shadow-[0_0_30px_rgba(244,63,94,0.3)]">
+                  <Siren className="w-12 h-12 text-rose-400" />
+                </div>
+                <h2 className="text-2xl font-black text-white mb-2">Ligtas Ka, Alam Namin</h2>
+                <p className="text-sm text-slate-400 mb-8">May SOS button para sa emergency. I-tap lang ito para ma-alert ang mga driver at authorities sa area.</p>
+              </>
+            )}
+
+            <div className="flex gap-2 w-full mt-4">
+              <button onClick={handleFinishOnboarding} className="flex-1 py-3 bg-slate-800 text-slate-400 font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">
+                Skip
+              </button>
+              <button onClick={handleNextOnboard} className="flex-1 py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm hover:bg-emerald-400 transition-all">
+                {onboardStep === 2 ? "Get Started" : "Next"}
+              </button>
+            </div>
+            
+            <div className="flex gap-2 mt-6">
+              {[0, 1, 2].map(i => (
+                <div key={i} className={`w-2 h-2 rounded-full transition-all ${onboardStep === i ? 'bg-emerald-400 w-6' : 'bg-slate-700'}`}></div>
+              ))}
             </div>
           </div>
         </div>
