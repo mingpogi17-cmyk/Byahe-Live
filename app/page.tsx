@@ -2,153 +2,188 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Navigation, Bus, ArrowRight, Download, Sun, Moon } from "lucide-react";
-import { motion } from "framer-motion";
+import { database } from "@/lib/firebase";
+import { ref, onValue } from "firebase/database";
+import { Bus, MapPin, Clock, WifiOff, AlertTriangle, Loader2, Ticket, Navigation } from "lucide-react";
+
+interface TripData {
+  tripId: string;
+  status: "Available" | "Standing" | "Full";
+  location: { lat: number; lng: number };
+  seatsAvailable?: number;
+  updatedAt: number;
+}
 
 export default function HomePage() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstall, setShowInstall] = useState(false);
-  const [isDark, setIsDark] = useState(true);
+  const [trips, setTrips] = useState<TripData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [now, setNow] = useState<number>(Date.now());
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "light") {
-      setIsDark(false);
-      document.documentElement.classList.remove("dark");
-    } else {
-      setIsDark(true);
-      document.documentElement.classList.add("dark");
-    }
-
-    const handler = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setShowInstall(true);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    const timer = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(timer);
   }, []);
 
-  const toggleTheme = () => {
-    const newTheme = !isDark;
-    setIsDark(newTheme);
-    if (newTheme) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  };
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    setIsOffline(!navigator.onLine);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') setShowInstall(false);
-    setDeferredPrompt(null);
-  };
+  useEffect(() => {
+    setLoading(true);
+    const tripsRef = ref(database, "live_trips");
+    const unsubscribe = onValue(
+      tripsRef,
+      (snapshot) => {
+        setLoading(false);
+        setErrorMsg(null);
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const list: TripData[] = Object.values(data);
+          setTrips(list);
+        } else {
+          setTrips([]);
+        }
+      },
+      (error) => {
+        setLoading(false);
+        setErrorMsg("Hindi makakonekta sa server. Paki-check ang iyong internet.");
+      }
+    );
+    return () => unsubscribe();
+  }, []);
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.15 } }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 300 } }
+  const getMinutesAgo = (timestamp: number) => {
+    const diffMs = now - timestamp;
+    return Math.max(0, Math.floor(diffMs / 60000));
   };
 
   return (
-    <div className={`relative min-h-screen flex flex-col items-center justify-center p-6 overflow-hidden ${isDark ? 'text-white' : 'text-slate-900'}`}>
-      
-      {/* Mesh Background */}
-      <div className="mesh-bg"></div>
-
-      {/* Navbar */}
-      <nav className={`fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 glass-panel`}>
+    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 flex flex-col items-center">
+      {/* Header */}
+      <header className="w-full max-w-md my-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Bus className={`w-6 h-6 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
-          <span className={`font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Biyahe Live</span>
+          <Bus className="w-7 h-7 text-emerald-400" />
+          <h1 className="text-xl font-bold tracking-wide">BIYAHE LIVE</h1>
         </div>
-        <div className="flex items-center gap-3">
-          {showInstall && (
-            <button onClick={handleInstallClick} className="hidden md:flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 px-4 py-2 rounded-full font-semibold text-sm hover:bg-emerald-500 hover:text-white transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-              <Download className="w-4 h-4" /> Install
-            </button>
-          )}
-          <button onClick={toggleTheme} className={`p-2 rounded-full transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-200 hover:bg-slate-300 text-slate-800'}`}>
-            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
+        <div className="flex items-center gap-2">
+          <Link href="/driver" className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-slate-700 transition-all">
+            <Navigation className="w-3.5 h-3.5" /> Driver
+          </Link>
+          <Link href="/commuter/ticket" className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-emerald-500 hover:text-white transition-all">
+            <Ticket className="w-3.5 h-3.5" /> Ticket
+          </Link>
         </div>
-      </nav>
+      </header>
 
-      {/* Main Content */}
-      <motion.div 
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-        className="z-10 w-full max-w-md mt-16"
-      >
-        <motion.div variants={itemVariants} className="text-center mb-12">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className={`p-4 rounded-3xl shadow-2xl ${isDark ? 'bg-emerald-950/80 border border-emerald-800/50 text-emerald-400 shadow-emerald-500/20' : 'bg-white border border-slate-200 text-emerald-600 shadow-md'}`}>
-              <Bus className="w-12 h-12" />
+      <main className="w-full max-w-md space-y-4">
+        {isOffline && (
+          <div className="p-4 bg-amber-950/90 border border-amber-600/50 rounded-xl flex items-center gap-3 text-amber-200">
+            <WifiOff className="w-6 h-6 shrink-0 text-amber-400" />
+            <div>
+              <p className="font-bold text-sm">Walang Koneksyon sa Internet</p>
+              <p className="text-xs text-amber-300/80">Nasa offline mode ka ngayon.</p>
             </div>
           </div>
-          
-          {/* Title - SOLID COLOR, NO GRADIENT */}
-          <h1 className={`text-4xl md:text-5xl font-black tracking-tight mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Biyahe Live
-          </h1>
-          <p className={`text-lg ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-            Davao Region Commuter Telemetry
-          </p>
-        </motion.div>
+        )}
 
-        {/* Role Cards */}
-        <div className="space-y-4">
-          <motion.div variants={itemVariants}>
-            <Link href="/driver" className={`group block p-6 rounded-2xl transition-all duration-300 relative overflow-hidden ${isDark ? 'bg-[#111827] border-slate-800 hover:border-emerald-500/50' : 'bg-white border-slate-200 hover:border-emerald-500/50 hover:shadow-lg'}`}>
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 to-emerald-500/10 group-hover:to-emerald-500/20 transition-all"></div>
-              <div className="flex items-center justify-between relative z-10">
-                <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-xl shadow-inner ${isDark ? 'bg-emerald-950/80 border-emerald-800/50 text-emerald-400' : 'bg-emerald-50 border-emerald-100 text-emerald-600'}`}>
-                    <Navigation className="w-8 h-8" />
+        {errorMsg && !isOffline && (
+          <div className="p-4 bg-rose-950/90 border border-rose-600/50 rounded-xl flex items-center gap-3 text-rose-200">
+            <AlertTriangle className="w-6 h-6 shrink-0 text-rose-400" />
+            <div>
+              <p className="font-bold text-sm">Nagkaroon ng Problema</p>
+              <p className="text-xs text-rose-300/80">{errorMsg}</p>
+            </div>
+          </div>
+        )}
+
+        {loading && (
+          <div className="py-12 bg-slate-900 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-slate-400 space-y-3">
+            <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+            <p className="text-sm font-medium">Kina-karga ang mga sasakyan...</p>
+          </div>
+        )}
+
+        {!loading && trips.length === 0 && !errorMsg && (
+          <div className="py-12 px-6 bg-slate-900 rounded-2xl border border-slate-800 text-center space-y-3">
+            <Bus className="w-12 h-12 text-slate-600 mx-auto" />
+            <p className="font-bold text-slate-300">Walang biyahe sa ngayon</p>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">Mag-refresh mamaya kapag may paparating na sasakyan.</p>
+          </div>
+        )}
+
+        {!loading && trips.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
+              PAPARATING NA SASAKYAN ({trips.length})
+            </p>
+
+            {trips.map((trip) => {
+              const minsAgo = getMinutesAgo(trip.updatedAt);
+              const isStale = minsAgo >= 30;
+
+              return (
+                <div
+                  key={trip.tripId}
+                  className={`p-5 rounded-2xl border transition-all ${
+                    isStale
+                      ? "bg-slate-900/40 border-slate-800 opacity-40 grayscale"
+                      : "bg-slate-900 border-slate-800 hover:border-slate-700 shadow-md"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-emerald-950/60 rounded-xl border border-emerald-800/40 text-emerald-400">
+                        <Bus className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h2 className="font-bold text-base text-slate-100">PUJ / PUV #{trip.tripId.slice(-4).toUpperCase()}</h2>
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-slate-500" />
+                          {trip.location.lat.toFixed(4)}, {trip.location.lng.toFixed(4)}
+                        </span>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                      trip.status === "Available" ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                      : trip.status === "Standing" ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
+                      : "bg-rose-950/80 text-rose-300 border-rose-700/60"
+                    }`}>
+                      {trip.status === "Available" 
+                        ? `${trip.seatsAvailable ?? '?'} upuan` 
+                        : trip.status === "Standing" ? "Tayo Lang" : "Puno Na"}
+                    </span>
                   </div>
-                  <div>
-                    <h2 className={`text-xl font-bold ${isDark ? 'text-white group-hover:text-emerald-400' : 'text-slate-900 group-hover:text-emerald-600'}`}>Driver / Conductor</h2>
-                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Start a trip and broadcast location</p>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                      {minsAgo === 0 ? "Bago lang na-update" : `${minsAgo} min ang nakalipas`}
+                    </span>
+                    {isStale && (
+                      <span className="text-[10px] text-rose-400 font-semibold bg-rose-950/50 px-2 py-0.5 rounded border border-rose-900">
+                        Huli na ang update (&gt;30m)
+                      </span>
+                    )}
                   </div>
                 </div>
-                <ArrowRight className={`w-6 h-6 transition-all group-hover:translate-x-1 ${isDark ? 'text-slate-600 group-hover:text-emerald-400' : 'text-slate-400 group-hover:text-emerald-600'}`} />
-              </div>
-            </Link>
-          </motion.div>
+              );
+            })}
+          </div>
+        )}
+      </main>
 
-          <motion.div variants={itemVariants}>
-            <Link href="/commuter" className={`group block p-6 rounded-2xl transition-all duration-300 relative overflow-hidden ${isDark ? 'bg-[#111827] border-slate-800 hover:border-blue-500/50' : 'bg-white border-slate-200 hover:border-blue-500/50 hover:shadow-lg'}`}>
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 to-blue-500/10 group-hover:to-blue-500/20 transition-all"></div>
-              <div className="flex items-center justify-between relative z-10">
-                <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-xl shadow-inner ${isDark ? 'bg-blue-950/80 border-blue-800/50 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
-                    <Bus className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <h2 className={`text-xl font-bold ${isDark ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>Commuter</h2>
-                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>See approaching vehicles at your shed</p>
-                  </div>
-                </div>
-                <ArrowRight className={`w-6 h-6 transition-all group-hover:translate-x-1 ${isDark ? 'text-slate-600 group-hover:text-blue-400' : 'text-slate-400 group-hover:text-blue-600'}`} />
-              </div>
-            </Link>
-          </motion.div>
-        </div>
-      </motion.div>
-
-      <footer className={`fixed bottom-6 text-center text-xs transition-colors ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-        <p>Developed by Ray Mar Olandria</p>
-        <p className="mt-1">Biyahe Live © 2026</p>
+      <footer className="text-center text-xs text-slate-500 my-8">
+        Developed by Ray Mar Olandria · 0969-149-1319
       </footer>
     </div>
   );
