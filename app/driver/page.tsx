@@ -382,3 +382,9 @@ export default function DriverPage() {
     </div>
   );
 }
+      <div className="w-full max-w-md text-center my-4 text-xs text-slate-500 flex flex-col items-center gap-2">
+        <p>Biyahe Live © 2026</p>
+        <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline transition-colors">
+          Privacy Policy & Terms
+        </Link>
+      </div>
