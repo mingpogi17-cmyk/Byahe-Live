@@ -37,16 +37,40 @@ interface Shed {
 }
 
 const SHEDS: Shed[] = [
+  // Davao City Areas
+  { id: "toril", name: "Toril", lat: 7.0153, lng: 125.4922 },
+  { id: "mintal", name: "Mintal", lat: 7.0997, lng: 125.5885 },
+  { id: "calinan", name: "Calinan", lat: 7.1861, lng: 125.4552 },
+  { id: "bunawan", name: "Bunawan", lat: 7.2947, lng: 125.6941 },
+
+  // Davao del Sur (South Bound)
   { id: "sta_cruz", name: "Sta. Cruz", lat: 6.8342, lng: 125.4149 },
   { id: "digos", name: "Digos City", lat: 6.7497, lng: 125.3572 },
+  { id: "guihing", name: "Guihing", lat: 6.68444, lng: 125.3525 },
+  { id: "hagonoy", name: "Hagonoy", lat: 6.6892, lng: 125.3256 },
+  { id: "padada", name: "Padada", lat: 6.6413, lng: 125.3451 },
+  { id: "kiblawan", name: "Kiblawan", lat: 6.61417, lng: 125.23667 },
+  { id: "matanao", name: "Matanao", lat: 6.7092, lng: 125.2178 },
+  { id: "bansalan", name: "Bansalan", lat: 6.78611, lng: 125.21333 },
+  { id: "sta_maria", name: "Sta. Maria", lat: 6.5536, lng: 125.4708 },
+  { id: "malita", name: "Malita", lat: 6.4097, lng: 125.6122 },
+
+  // Davao del Norte (North Bound)
   { id: "panabo", name: "Panabo City", lat: 7.3079, lng: 125.6841 },
-  { id: "tagum", name: "Tagum City", lat: 7.4478, lng: 125.8072 },
   { id: "carmen", name: "Carmen", lat: 7.2095, lng: 125.7055 },
-  { id: "babak", name: "Babak", lat: 7.1347, lng: 125.6837 },
-  { id: "samal", name: "Island Garden City of Samal", lat: 7.0733, lng: 125.7083 },
-  { id: "mintal", name: "Mintal", lat: 7.0997, lng: 125.5885 },
-  { id: "toril", name: "Toril", lat: 7.0153, lng: 125.4922 },
-  { id: "calinan", name: "Calinan", lat: 7.1861, lng: 125.4552 },
+  { id: "tagum", name: "Tagum City", lat: 7.4478, lng: 125.8072 },
+  { id: "sto_tomas", name: "Sto. Tomas", lat: 7.4443, lng: 125.7528 },
+  { id: "asuncion", name: "Asuncion", lat: 7.5386, lng: 125.7508 },
+  { id: "kapalong", name: "Kapalong", lat: 7.5854, lng: 125.7052 },
+  { id: "new_corella", name: "New Corella", lat: 7.5866, lng: 125.8237 },
+
+  // Davao de Oro (Further North)
+  { id: "maco", name: "Maco", lat: 7.3619, lng: 125.8553 },
+  { id: "mabini", name: "Mabini", lat: 7.3092, lng: 125.8556 },
+
+  // Samal / Island
+  { id: "babak", name: "Babak (IGACOS)", lat: 7.1347, lng: 125.6837 },
+  { id: "samal", name: "Samal City", lat: 7.0733, lng: 125.7083 },
 ];
 
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -283,7 +307,10 @@ export default function HomePage() {
       <header className="w-full max-w-md my-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Bus className="w-7 h-7 text-emerald-400" />
-          <h1 className="text-xl font-bold tracking-wide">BIYAHE LIVE</h1>
+          <div>
+            <h1 className="text-xl font-bold tracking-wide">BIYAHE LIVE</h1>
+            <p className="text-[10px] text-slate-400 tracking-widest uppercase">Davao Region</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-1 rounded-full text-xs font-bold">
@@ -306,7 +333,7 @@ export default function HomePage() {
                 <ChevronDown className="w-4 h-4 text-slate-500" />
               </button>
               {showShedDropdown && (
-                <div className="absolute top-full left-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1">
+                <div className="absolute top-full left-0 mt-2 w-56 max-h-64 overflow-y-auto bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 animate-in fade-in slide-in-from-top-1">
                   {SHEDS.map(shed => (
                     <button key={shed.id} onClick={() => { setSelectedShed(shed); setShowShedDropdown(false); }} className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-700 transition-colors ${selectedShed.id === shed.id ? 'text-emerald-400 font-bold bg-slate-700/50' : 'text-slate-300'}`}>
                       {shed.name}
@@ -402,7 +429,7 @@ export default function HomePage() {
                       <div className="p-2 bg-emerald-950/60 rounded-xl border border-emerald-800/40 text-emerald-400"><Bus className="w-5 h-5" /></div>
                       <div>
                         <h2 className="font-bold text-base flex items-center gap-1.5">
-                          PUJ / PUV #{trip.tripId.slice(-4).toUpperCase()}
+                          Van / Bus #{trip.tripId.slice(-4).toUpperCase()}
                           {trip.isVerified && <ShieldCheck className="w-4 h-4 text-blue-400" />}
                         </h2>
                         <span className="text-[11px] text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> {distance.toFixed(1)} km away</span>
@@ -491,7 +518,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ONBOARDING MODAL - FIXED */}
       {showOnboarding && (
         <div className="fixed inset-0 z-[200] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-in zoom-in duration-300 text-center flex flex-col items-center">
@@ -502,7 +528,7 @@ export default function HomePage() {
                   <Bus className="w-12 h-12 text-emerald-400" />
                 </div>
                 <h2 className="text-2xl font-black text-white mb-2">Welcome sa Biyahe Live!</h2>
-                <p className="text-sm text-slate-400 mb-8">Ang iyong kasama sa pag-commute sa Davao. Alam mo na bago ka pa umabang.</p>
+                <p className="text-sm text-slate-400 mb-8">Ang iyong kasama sa pag-commute sa Davao Region. Alam mo na bago ka pa umabang.</p>
               </>
             )}
 
