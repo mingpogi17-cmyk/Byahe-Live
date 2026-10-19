@@ -73,9 +73,11 @@ export default function HomePage() {
   const [activeAlert, setActiveAlert] = useState<CommunityAlert | null>(null);
   const [alarms, setAlarms] = useState<{[key: string]: number}>({});
 
-  // NEW STATES
   const [points, setPoints] = useState(0);
   const [showSosModal, setShowSosModal] = useState(false);
+
+  // 🚨 ANTI-SPAM STATE
+  const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
 
   useEffect(() => {
     const savedPoints = localStorage.getItem("biyahe_points");
@@ -140,9 +142,10 @@ export default function HomePage() {
     return () => { unsubTrips(); unsubReports(); unsubAlert(); };
   }, []);
 
+  // 🚨 SAFETY CHECK SA LOCATION (Para hindi mag-crash kapag walang GPS)
   const sortedAndFilteredTrips = useMemo(() => {
     const nearbyTrips = trips.filter(trip => {
-      if (trip.isOutOfService) return false; 
+      if (trip.isOutOfService || !trip.location || !trip.location.lat) return false; 
       const distance = getDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
       return distance <= 15;
     });
@@ -170,6 +173,12 @@ export default function HomePage() {
   };
 
   const handleReport = async (tripId: string, type: "correct" | "wrong") => {
+    // 🚨 ANTI-SPAM CHECK
+    if (reportedTrips[tripId]) {
+      alert("Naka-report ka na para sa sasakyang ito.");
+      return;
+    }
+
     try {
       const trip = trips.find(t => t.tripId === tripId);
       const currentReports = trip?.reports || { correct: 0, wrong: 0 };
@@ -180,10 +189,12 @@ export default function HomePage() {
       await set(ref(database, `reports/${tripId}`), updates);
       if (navigator.vibrate) navigator.vibrate(50);
 
-      // DAGDAG NG POINTS
       const newPoints = points + 5;
       setPoints(newPoints);
       localStorage.setItem("biyahe_points", newPoints.toString());
+
+      // I-SAVE NA NAKA-REPORT NA PARA MA-DISABLE ANG BUTTONS
+      setReportedTrips(prev => ({ ...prev, [tripId]: true }));
     } catch (err) { console.error(err); }
   };
 
@@ -255,7 +266,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* SOS FLOATING BUTTON */}
       <button onClick={() => setShowSosModal(true)} className="fixed bottom-6 right-6 z-50 p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse">
         <Siren className="w-8 h-8" />
       </button>
@@ -266,7 +276,6 @@ export default function HomePage() {
           <h1 className="text-xl font-bold tracking-wide">BIYAHE LIVE</h1>
         </div>
         <div className="flex items-center gap-2">
-          {/* POINTS BADGE */}
           <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-1 rounded-full text-xs font-bold">
             <Award className="w-3.5 h-3.5" /> {points} pts
           </div>
@@ -361,7 +370,7 @@ export default function HomePage() {
         )}
 
         {!loading && sortedAndFilteredTrips.length > 0 && (
-          <div className="space-y-3 pb-20"> {/* Padding para hindi matakpan ng SOS button */}
+          <div className="space-y-3 pb-20">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
               PAPARATING SA {selectedShed.name.toUpperCase()} ({sortedAndFilteredTrips.length})
             </p>
@@ -374,6 +383,7 @@ export default function HomePage() {
               const isLowTrust = trustScore < -2;
               const hasAlarm = alarms[trip.tripId];
               const fareDisplay = trip.fare ? `₱${trip.fare}` : "₱15";
+              const isReported = reportedTrips[trip.tripId];
 
               return (
                 <div key={trip.tripId} className={`p-5 rounded-2xl border transition-all ${isStale || isLowTrust ? "opacity-40 grayscale" : "bg-slate-900 border-slate-800 shadow-md"}`}>
@@ -413,8 +423,12 @@ export default function HomePage() {
 
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-800/80">
                     <span className="text-[10px] text-slate-500">Tama ba ito?</span>
-                    <button onClick={() => handleReport(trip.tripId, "correct")} className="px-2 py-1 bg-emerald-950/50 border border-emerald-800/50 text-emerald-400 rounded-lg text-[10px] font-bold hover:bg-emerald-500 hover:text-white transition-all">👍 Tama ({trip.reports?.correct ?? 0})</button>
-                    <button onClick={() => handleReport(trip.tripId, "wrong")} className="px-2 py-1 bg-rose-950/50 border border-rose-800/50 text-rose-400 rounded-lg text-[10px] font-bold hover:bg-rose-500 hover:text-white transition-all">👎 Mali ({trip.reports?.wrong ?? 0})</button>
+                    <button disabled={isReported} onClick={() => handleReport(trip.tripId, "correct")} className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${isReported ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-950/50 border border-emerald-800/50 text-emerald-400 hover:bg-emerald-500 hover:text-white'}`}>
+                      👍 Tama ({trip.reports?.correct ?? 0})
+                    </button>
+                    <button disabled={isReported} onClick={() => handleReport(trip.tripId, "wrong")} className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${isReported ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-rose-950/50 border border-rose-800/50 text-rose-400 hover:bg-rose-500 hover:text-white'}`}>
+                      👎 Mali ({trip.reports?.wrong ?? 0})
+                    </button>
                   </div>
                 </div>
               );
@@ -427,7 +441,6 @@ export default function HomePage() {
         Biyahe Live © 2026 · Developed by Ray Mar Olandria
       </footer>
 
-      {/* REPORT MODAL */}
       {showReportModal && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -447,13 +460,12 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* SOS MODAL */}
       {showSosModal && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200 text-center">
             <Siren className="w-16 h-16 text-rose-500 mx-auto mb-4 animate-pulse" />
             <h2 className="text-2xl font-black text-white mb-2">Kumpirmahin ang SOS</h2>
-            <p className="text-sm text-rose-200 mb-6">I-tap ang "Send SOS" kung may emergency (aksidente, holdap, o harassment).</p>
+            <p className="text-sm text-rose-200 mb-6">I-tap ang "Send SOS" kung may emergency.</p>
             <div className="space-y-3">
               <button onClick={triggerSOS} className="w-full py-4 bg-rose-600 text-white font-black text-lg rounded-xl shadow-lg hover:bg-rose-500 transition-all">
                 SEND SOS NOW

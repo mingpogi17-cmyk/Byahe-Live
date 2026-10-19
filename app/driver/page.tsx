@@ -6,7 +6,7 @@ import { database, ensureAuth } from "@/lib/firebase";
 import { ref, set, remove, update, onValue } from "firebase/database";
 import { 
   Navigation, Play, Square, CheckCircle2, QrCode, Minus, Plus, 
-  ShieldAlert, Timer, Wallet, Power, AlertOctagon, Map, Siren, X, Check
+  ShieldAlert, Timer, Wallet, Power, AlertOctagon, Map, Siren, X, Check, QrCode as GcashIcon
 } from "lucide-react";
 
 export default function DriverPage() {
@@ -35,7 +35,6 @@ export default function DriverPage() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const alarmIntervalRef = useRef<any>(null);
 
-  // 🚨 SIREN SOUND FUNCTION
   const playSiren = () => {
     if (!audioCtxRef.current) {
       audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -49,12 +48,10 @@ export default function DriverPage() {
     osc.type = 'square';
     osc.frequency.setValueAtTime(800, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.5);
-    
     gain.gain.setValueAtTime(0.1, ctx.currentTime);
     
     osc.connect(gain);
     gain.connect(ctx.destination);
-    
     osc.start();
     osc.stop(ctx.currentTime + 0.6);
   };
@@ -66,7 +63,7 @@ export default function DriverPage() {
     alarmIntervalRef.current = setInterval(() => {
       playSiren();
       if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100]);
-    }, 1200); // Play every 1.2 seconds
+    }, 1200);
   };
 
   const stopAlarm = () => {
@@ -95,10 +92,10 @@ export default function DriverPage() {
       if (snap.exists()) {
         setSosAlert(snap.val());
         setIsSosAcknowledged(false);
-        startAlarm(); // 🚨 Trigger sound & vibration
+        startAlarm();
       } else {
         setSosAlert(null);
-        stopAlarm(); // Stop sound if cleared
+        stopAlarm();
       }
     });
 
@@ -245,7 +242,6 @@ export default function DriverPage() {
   return (
     <div className={`min-h-screen bg-slate-900 text-white p-4 md:p-8 flex flex-col items-center justify-between relative ${isEmergency ? 'bg-rose-950' : ''}`}>
       
-      {/* 🚨 SOS ALERT BANNER */}
       {sosAlert && (
         <div className={`fixed top-0 left-0 w-full z-[100] p-4 flex flex-col gap-3 shadow-2xl transition-all ${isSosAcknowledged ? 'bg-rose-950 border-b border-rose-600' : 'bg-rose-600 animate-pulse'}`}>
           <div className="flex items-center justify-between">
@@ -347,6 +343,23 @@ export default function DriverPage() {
               <span className="font-mono text-lg font-bold text-amber-400">{formatTime(reservedTimer)}</span>
             </div>
           )}
+        </div>
+
+        {/* 💳 GCASH PAYMENT CARD */}
+        <div className="bg-slate-900 p-4 rounded-xl border border-blue-900/50 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-950 text-blue-400 rounded-lg">
+              <GcashIcon className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">GCash Payment</p>
+              <p className="text-[10px] text-slate-400">I-scan ang QR code para magbayad</p>
+            </div>
+          </div>
+          <div className="bg-white p-1 rounded-lg">
+            {/* Mock QR Code Image */}
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=GCash_Payment_BiyaheLive" alt="GCash QR" className="w-12 h-12" />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
