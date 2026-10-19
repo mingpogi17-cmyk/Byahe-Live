@@ -218,7 +218,7 @@ export default function HomePage() {
     }
   };
 
-  const triggerSOS = async () => {
+    const triggerSOS = async () => {
     try {
       await set(ref(database, "sos_alert"), { 
         id: "sos_" + Date.now(), 
@@ -228,7 +228,12 @@ export default function HomePage() {
       setShowSosModal(false);
       if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
       alert("SOS Sent! Na-notify na ang mga driver at authorities sa area.");
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      // Idinagdag ito para may feedback kahit mag-fail
+      alert("Hindi ma-send ang SOS. Paki-check ang iyong internet connection.");
+      setShowSosModal(false); 
+    }
   };
 
   const alertStyles = (type: string) => {
