@@ -46,6 +46,15 @@ const SHEDS: Shed[] = [
   { id: "calinan", name: "Calinan", lat: 7.1861, lng: 125.4552 },
 ];
 
+// ANG FUNCTION NA ITO AY NASA LABAS PARA HINDI MAG-ERROR SA MEMO
+const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+};
+
 export default function HomePage() {
   const [trips, setTrips] = useState<TripData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,30 +131,23 @@ export default function HomePage() {
     return () => { unsubTrips(); unsubReports(); unsubAlert(); };
   }, []);
 
+  // Inayos ang useMemo (Diretso sa getDistance na function)
   const sortedAndFilteredTrips = useMemo(() => {
     const nearbyTrips = trips.filter(trip => {
-      const distance = calculateDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
+      const distance = getDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
       return distance <= 15;
     });
 
     return nearbyTrips.sort((a, b) => {
       if (a.status === "Available" && b.status !== "Available") return -1;
       if (a.status !== "Available" && b.status === "Available") return 1;
-      const distA = calculateDistance(selectedShed.lat, selectedShed.lng, a.location.lat, a.location.lng);
-      const distB = calculateDistance(selectedShed.lat, selectedShed.lng, b.location.lat, b.location.lng);
+      const distA = getDistance(selectedShed.lat, selectedShed.lng, a.location.lat, a.location.lng);
+      const distB = getDistance(selectedShed.lat, selectedShed.lng, b.location.lat, b.location.lng);
       return distA - distB;
     });
   }, [trips, selectedShed]);
 
   const getMinutesAgo = (timestamp: number) => Math.max(0, Math.floor((now - timestamp) / 60000));
-
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  };
 
   const handleFavoriteShed = () => {
     if (isFavorite) { localStorage.removeItem("favorite_shed"); setIsFavorite(false); }
@@ -331,7 +333,7 @@ export default function HomePage() {
             {sortedAndFilteredTrips.map((trip) => {
               const minsAgo = getMinutesAgo(trip.updatedAt);
               const isStale = minsAgo >= 30;
-              const distance = calculateDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
+              const distance = getDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
               const trustScore = trip.reports ? trip.reports.correct - trip.reports.wrong : 0;
               const isLowTrust = trustScore < -2;
               const hasAlarm = alarms[trip.tripId];
