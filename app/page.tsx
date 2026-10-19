@@ -62,11 +62,11 @@ export default function HomePage() {
   return (
     <div className={`relative min-h-screen flex flex-col items-center justify-center p-6 overflow-hidden ${isDark ? 'text-white' : 'text-slate-900'}`}>
       
-      {/* Premium Mesh Background - Only visible in Dark Mode */}
+      {/* Mesh Background */}
       <div className="mesh-bg"></div>
 
       {/* Navbar */}
-      <nav className={`fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 transition-all ${isDark ? 'glass-panel' : 'bg-white border-b border-slate-200 shadow-sm'}`}>
+      <nav className={`fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 glass-panel`}>
         <div className="flex items-center gap-2">
           <Bus className={`w-6 h-6 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
           <span className={`font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Biyahe Live</span>
@@ -97,8 +97,8 @@ export default function HomePage() {
             </div>
           </div>
           
-          {/* Title - Fixed for Light Mode */}
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-3 text-slate-900 dark:text-white">
+          {/* Title - SOLID COLOR, NO GRADIENT */}
+          <h1 className={`text-4xl md:text-5xl font-black tracking-tight mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
             Biyahe Live
           </h1>
           <p className={`text-lg ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
