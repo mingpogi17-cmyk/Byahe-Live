@@ -220,14 +220,12 @@ export default function HomePage() {
                     {isStale && (
                       <span className="text-[10px] text-rose-400 font-semibold bg-rose-950/50 px-2 py-0.5 rounded border border-rose-900">
                         Huli na ang update (&gt;30m)
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-              </main>
+                                        </span>
+              </div>
+            </div>
+          );
+        })}
+      </main>
 
       <footer className="text-center text-xs text-slate-500 my-8">
         Biyahe Live © 2026 · Developed by Ray Mar P Olandria
