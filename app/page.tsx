@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { database, ensureAuth } from "@/lib/firebase";
-import { ref, set, remove, update } from "firebase/database";
+import { ref, set, remove, update, onValue } from "firebase/database";
 import { 
   Navigation, Play, Square, CheckCircle2, QrCode, Minus, Plus, 
-  ShieldAlert, Timer, Wallet, Power, AlertOctagon, Map 
+  ShieldAlert, Timer, Wallet, Power, AlertOctagon, Map, Siren, X
 } from "lucide-react";
 
 export default function DriverPage() {
@@ -17,11 +17,13 @@ export default function DriverPage() {
   const [seatsTotal] = useState(14);
   const [seatsAvailable, setSeatsAvailable] = useState(14);
 
-  // NEW FEATURES STATE
   const [fare, setFare] = useState(15);
   const [earnings, setEarnings] = useState(0);
   const [isOutOfService, setIsOutOfService] = useState(false);
   const [isEmergency, setIsEmergency] = useState(false);
+  
+  // SOS ALERT STATE
+  const [sosAlert, setSosAlert] = useState<any>(null);
 
   const [reservedSeats, setReservedSeats] = useState(2);
   const [isReservedActive, setIsReservedActive] = useState(false);
@@ -44,6 +46,14 @@ export default function DriverPage() {
     const savedSeats = localStorage.getItem("biyahe_seats");
     if (savedLive === "true") setIsLive(true);
     if (savedSeats) setSeatsAvailable(parseInt(savedSeats));
+
+    // Listen for SOS
+    const unsubSOS = onValue(ref(database, "sos_alert"), (snap) => {
+      if (snap.exists()) setSosAlert(snap.val());
+      else setSosAlert(null);
+    });
+
+    return () => unsubSOS();
   }, []);
 
   useEffect(() => {
@@ -67,7 +77,7 @@ export default function DriverPage() {
       const tripRef = ref(database, `live_trips/${tripId}`);
       await set(tripRef, {
         tripId, 
-        status: isOutOfService ? "Full" : currentStatus, // Kung out of service, itago sa listahan
+        status: isOutOfService ? "Full" : currentStatus,
         location: currentCoords, 
         seatsAvailable: currentSeats, 
         reservedSeats: currentReserved,
@@ -82,7 +92,7 @@ export default function DriverPage() {
 
   const handleStartTrip = async () => {
     if (!navigator.geolocation) return setErrorMessage("Walang Geolocation.");
-    setIsLive(true); setErrorMessage(null); setEarnings(0); // Reset earnings sa simula
+    setIsLive(true); setErrorMessage(null); setEarnings(0);
     try { await ensureAuth(); } catch (err) { return setErrorMessage("Hindi maka-login."); }
 
     navigator.geolocation.getCurrentPosition(
@@ -120,7 +130,6 @@ export default function DriverPage() {
     const newSeats = Math.max(0, Math.min(seatsTotal, seatsAvailable + delta));
     setSeatsAvailable(newSeats);
     
-    // KUNG MAY SUMAKAY (-1), DAGDAG SA EARNINGS
     if (delta === -1) {
       setEarnings(prev => prev + fare);
     }
@@ -162,7 +171,6 @@ export default function DriverPage() {
     const newState = !isEmergency;
     setIsEmergency(newState);
     if (newState) {
-      // Send alert to commuters
       try {
         await set(ref(database, "community_alert"), { id: "alert_" + Date.now(), type: "Emergency", timestamp: Date.now() });
       } catch (err) {}
@@ -171,6 +179,12 @@ export default function DriverPage() {
         await remove(ref(database, "community_alert"));
       } catch (err) {}
     }
+  };
+
+  const dismissSOS = async () => {
+    try {
+      await remove(ref(database, "sos_alert"));
+    } catch (err) { console.error(err); }
   };
 
   const formatTime = (seconds: number) => {
@@ -182,6 +196,22 @@ export default function DriverPage() {
   return (
     <div className={`min-h-screen bg-slate-900 text-white p-4 md:p-8 flex flex-col items-center justify-between relative ${isEmergency ? 'bg-rose-950' : ''}`}>
       
+      {/* 🚨 SOS ALERT BANNER */}
+      {sosAlert && (
+        <div className="fixed top-0 left-0 w-full z-[100] bg-rose-600 p-4 flex items-center justify-between animate-pulse shadow-2xl">
+          <div className="flex items-center gap-3 text-white">
+            <Siren className="w-8 h-8 animate-bounce" />
+            <div>
+              <p className="font-black text-lg">SOS ALERT!</p>
+              <p className="text-xs font-semibold">Location: {sosAlert.shed}</p>
+            </div>
+          </div>
+          <button onClick={dismissSOS} className="p-2 bg-black/20 rounded-full text-white hover:bg-black/40 transition">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+      )}
+
       {/* Waze & Scanner Floating Buttons */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
         <a href="https://waze.com/ul" target="_blank" rel="noopener noreferrer" className="p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl transition-all flex items-center justify-center">
@@ -202,7 +232,6 @@ export default function DriverPage() {
 
       <div className="w-full max-w-md bg-slate-800 rounded-2xl p-6 shadow-xl border border-slate-700 space-y-4">
         
-        {/* TRIP STATUS & OUT OF SERVICE */}
         <div className={`p-4 rounded-xl flex items-center justify-between ${isLive ? (isOutOfService ? 'bg-slate-700 border-slate-500' : 'bg-emerald-950/80 border-emerald-500/50') : 'bg-slate-700/50'}`}>
           <div>
             <p className="text-xs text-slate-400 uppercase font-semibold">TRIP STATUS</p>
@@ -213,7 +242,6 @@ export default function DriverPage() {
 
         {errorMessage && <div className="p-3 bg-rose-950 text-rose-200 rounded-lg text-sm">{errorMessage}</div>}
 
-        {/* EARNINGS & FARE SETTINGS */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center">
             <Wallet className="w-5 h-5 text-emerald-400 mb-1" />
@@ -221,7 +249,7 @@ export default function DriverPage() {
             <p className="text-xl font-black text-white">₱{earnings}</p>
           </div>
           <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center">
-            <p className="text-[10px] text-slate-400 mb-1">PAMASAHE (BAWAT SAKAY)</p>
+            <p className="text-[10px] text-slate-400 mb-1">PAMASAHE</p>
             <div className="flex items-center gap-2">
               <button onClick={() => setFare(Math.max(5, fare - 5))} className="text-slate-400 hover:text-white">-</button>
               <p className="text-xl font-black text-amber-400">₱{fare}</p>
@@ -230,7 +258,6 @@ export default function DriverPage() {
           </div>
         </div>
         
-        {/* SEAT COUNTER */}
         <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
           <p className="text-xs text-slate-400 text-center mb-3">AVAILABLE SEATS</p>
           <div className="flex items-center justify-between">
@@ -240,7 +267,6 @@ export default function DriverPage() {
           </div>
         </div>
 
-        {/* RESERVED SEATS */}
         <div className={`p-4 rounded-xl border transition-all ${isReservedActive ? 'bg-amber-950/50 border-amber-500/50' : 'bg-slate-900 border-slate-700'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -262,7 +288,6 @@ export default function DriverPage() {
           )}
         </div>
 
-        {/* UTILITY BUTTONS */}
         <div className="grid grid-cols-2 gap-2">
           <button onClick={() => setIsOutOfService(!isOutOfService)} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${isOutOfService ? 'bg-slate-700 border-slate-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>
             <Power className="w-5 h-5" />
@@ -274,7 +299,6 @@ export default function DriverPage() {
           </button>
         </div>
 
-        {/* START / END TRIP */}
         {!isLive ? (
           <button onClick={handleStartTrip} className="w-full py-5 bg-emerald-500 text-slate-950 font-black text-xl rounded-2xl mt-2">START TRIP</button>
         ) : (

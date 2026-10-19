@@ -7,7 +7,7 @@ import { ref, onValue, set, remove } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Ticket, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, CloudRain, Bell, BellRing, Wallet, AlertOctagon
+  Share2, CloudRain, Bell, BellRing, Wallet, Siren, Award
 } from "lucide-react";
 
 interface TripData {
@@ -73,7 +73,14 @@ export default function HomePage() {
   const [activeAlert, setActiveAlert] = useState<CommunityAlert | null>(null);
   const [alarms, setAlarms] = useState<{[key: string]: number}>({});
 
+  // NEW STATES
+  const [points, setPoints] = useState(0);
+  const [showSosModal, setShowSosModal] = useState(false);
+
   useEffect(() => {
+    const savedPoints = localStorage.getItem("biyahe_points");
+    if (savedPoints) setPoints(parseInt(savedPoints));
+
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
@@ -134,7 +141,6 @@ export default function HomePage() {
   }, []);
 
   const sortedAndFilteredTrips = useMemo(() => {
-    // 🚨 I-FILTER ANG MGA OUT OF SERVICE AT EMERGENCY
     const nearbyTrips = trips.filter(trip => {
       if (trip.isOutOfService) return false; 
       const distance = getDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
@@ -173,6 +179,11 @@ export default function HomePage() {
       };
       await set(ref(database, `reports/${tripId}`), updates);
       if (navigator.vibrate) navigator.vibrate(50);
+
+      // DAGDAG NG POINTS
+      const newPoints = points + 5;
+      setPoints(newPoints);
+      localStorage.setItem("biyahe_points", newPoints.toString());
     } catch (err) { console.error(err); }
   };
 
@@ -209,12 +220,24 @@ export default function HomePage() {
     }
   };
 
+  const triggerSOS = async () => {
+    try {
+      await set(ref(database, "sos_alert"), { 
+        id: "sos_" + Date.now(), 
+        shed: selectedShed.name,
+        timestamp: Date.now() 
+      });
+      setShowSosModal(false);
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+      alert("SOS Sent! Na-notify na ang mga driver at authorities sa area.");
+    } catch (err) { console.error(err); }
+  };
+
   const alertStyles = (type: string) => {
     switch(type) {
       case "May Dumaan": return "bg-emerald-950/80 border-emerald-500/50 text-emerald-300";
       case "Traffic": return "bg-amber-950/80 border-amber-500/50 text-amber-300";
       case "Puno Na": return "bg-rose-950/80 border-rose-500/50 text-rose-300";
-      case "Emergency": return "bg-rose-600 border-rose-400 text-white animate-pulse";
       default: return "bg-slate-800 border-slate-600 text-slate-300";
     }
   };
@@ -225,12 +248,17 @@ export default function HomePage() {
       {activeAlert && (
         <div className={`fixed top-4 z-50 w-full max-w-md px-4 py-3 rounded-xl border shadow-lg flex items-center justify-between animate-in slide-in-from-top-2 ${alertStyles(activeAlert.type)}`}>
           <div className="flex items-center gap-2 font-bold text-sm">
-            {activeAlert.type === "Emergency" ? <AlertOctagon className="w-5 h-5" /> : <Megaphone className="w-5 h-5" />}
+            <Megaphone className="w-5 h-5" />
             <span>{activeAlert.type} ({getMinutesAgo(activeAlert.timestamp)}m ago)</span>
           </div>
           <button onClick={handleClearAlert} className="p-1 hover:bg-black/20 rounded-full transition"><X className="w-4 h-4" /></button>
         </div>
       )}
+
+      {/* SOS FLOATING BUTTON */}
+      <button onClick={() => setShowSosModal(true)} className="fixed bottom-6 right-6 z-50 p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse">
+        <Siren className="w-8 h-8" />
+      </button>
 
       <header className="w-full max-w-md my-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -238,11 +266,12 @@ export default function HomePage() {
           <h1 className="text-xl font-bold tracking-wide">BIYAHE LIVE</h1>
         </div>
         <div className="flex items-center gap-2">
+          {/* POINTS BADGE */}
+          <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-1 rounded-full text-xs font-bold">
+            <Award className="w-3.5 h-3.5" /> {points} pts
+          </div>
           <Link href="/driver" className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-slate-700 transition-all">
             <Navigation className="w-3.5 h-3.5" /> Driver
-          </Link>
-          <Link href="/commuter/ticket" className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-emerald-500 hover:text-white transition-all">
-            <Ticket className="w-3.5 h-3.5" /> Ticket
           </Link>
         </div>
       </header>
@@ -283,6 +312,9 @@ export default function HomePage() {
               {getMinutesAgo(lastRefresh) === 0 ? "Ngayon lang" : `${getMinutesAgo(lastRefresh)} min`}
             </span>
             <div className="flex items-center gap-2">
+              <Link href="/commuter/ticket" className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 rounded-lg text-xs font-bold hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-1">
+                <Ticket className="w-3 h-3" /> Ticket
+              </Link>
               <button onClick={() => setShowReportModal(true)} className="px-3 py-1 bg-amber-500/10 border border-amber-500/50 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500 hover:text-white transition-all flex items-center gap-1">
                 <Megaphone className="w-3 h-3" /> Report
               </button>
@@ -329,7 +361,7 @@ export default function HomePage() {
         )}
 
         {!loading && sortedAndFilteredTrips.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-3 pb-20"> {/* Padding para hindi matakpan ng SOS button */}
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
               PAPARATING SA {selectedShed.name.toUpperCase()} ({sortedAndFilteredTrips.length})
             </p>
@@ -360,7 +392,6 @@ export default function HomePage() {
                       <span className={`px-3 py-1 rounded-full text-xs font-bold border ${trip.status === "Available" ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60" : trip.status === "Standing" ? "bg-amber-950/80 text-amber-300 border-amber-700/60" : "bg-rose-950/80 text-rose-300 border-rose-700/60"}`}>
                         {trip.status === "Available" ? `${trip.seatsAvailable ?? '?'} upuan` : trip.status === "Standing" ? "Tayo Lang" : "Puno Na"}
                       </span>
-                      {/* ESTIMATED FARE BADGE */}
                       <span className="text-[10px] font-bold text-amber-400 flex items-center gap-0.5">
                         <Wallet className="w-3 h-3" /> {fareDisplay}
                       </span>
@@ -392,10 +423,11 @@ export default function HomePage() {
         )}
       </main>
 
-      <footer className="text-center text-xs text-slate-500 my-8">
+      <footer className="text-center text-xs text-slate-500 my-8 pb-16">
         Biyahe Live © 2026 · Developed by Ray Mar Olandria
       </footer>
 
+      {/* REPORT MODAL */}
       {showReportModal && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -410,6 +442,25 @@ export default function HomePage() {
                   <CheckCircle2 className="w-4 h-4 text-slate-500" /> {situation}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SOS MODAL */}
+      {showSosModal && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200 text-center">
+            <Siren className="w-16 h-16 text-rose-500 mx-auto mb-4 animate-pulse" />
+            <h2 className="text-2xl font-black text-white mb-2">Kumpirmahin ang SOS</h2>
+            <p className="text-sm text-rose-200 mb-6">I-tap ang "Send SOS" kung may emergency (aksidente, holdap, o harassment).</p>
+            <div className="space-y-3">
+              <button onClick={triggerSOS} className="w-full py-4 bg-rose-600 text-white font-black text-lg rounded-xl shadow-lg hover:bg-rose-500 transition-all">
+                SEND SOS NOW
+              </button>
+              <button onClick={() => setShowSosModal(false)} className="w-full py-3 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-all">
+                Cancel
+              </button>
             </div>
           </div>
         </div>
