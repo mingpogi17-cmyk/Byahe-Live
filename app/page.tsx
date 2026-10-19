@@ -125,7 +125,7 @@ export default function DriverPage() {
       <div className="w-full max-w-md text-center my-4">
         <h1 className="text-2xl font-bold flex items-center justify-center gap-2">
           <Navigation className="w-8 h-8 text-emerald-400" /> BIYAHE LIVE - DRIVER
-          {isLive && <Volume2 className="w-5 h-5 text-emerald-400 animate-pulse" title="Voice Active" />}
+          {isLive && <Volume2 className="w-5 h-5 text-emerald-400 animate-pulse"{isLive && <Volume2 className="w-5 h-5 text-emerald-400 animate-pulse" />} />}
         </h1>
       </div>
 
