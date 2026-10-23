@@ -288,7 +288,7 @@ export default function DriverPage() {
   };
 
   return (
-    <div className={`min-h-screen bg-slate-900 text-white p-4 md:p-8 flex flex-col items-center justify-between relative ${isEmergency ? 'bg-rose-950' : ''}`}>
+    <div className={`min-h-screen bg-slate-900 text-white flex flex-col items-center relative ${isEmergency ? 'bg-rose-950' : ''}`}>
       
       {/* 🚨 ALERTS STACK */}
       <div className="fixed top-0 left-0 w-full z-[100] flex flex-col gap-2 p-2 max-w-md mx-auto">
@@ -325,23 +325,25 @@ export default function DriverPage() {
       </div>
 
       {/* FLOATING BUTTONS */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
+      <div className="fixed bottom-24 right-6 z-50 flex flex-col gap-3">
         <a href="https://waze.com/ul" target="_blank" rel="noopener noreferrer" className="p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl transition-all flex items-center justify-center"><Map className="w-6 h-6" /></a>
         {isLive && !isTerminalMode && (<Link href="/driver/scan" className="p-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full shadow-2xl transition-all flex items-center gap-2"><QrCode className="w-6 h-6" /><span className="font-bold pr-2">Scan</span></Link>)}
       </div>
 
-      {/* HEADER + TRIP STATUS (Pinaka-taas) */}
-      <div className="w-full max-w-md my-4 pt-12 flex items-center justify-between">
-        <h1 className="text-2xl font-bold flex items-center gap-2"><Navigation className="w-8 h-8 text-emerald-400" /> BIYAHE LIVE</h1>
+      {/* HEADER + TRIP STATUS (Sticky sa Taas) */}
+      <div className="w-full max-w-md sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md p-4 border-b border-slate-800 flex items-center justify-between mt-2">
+        <h1 className="text-xl font-bold flex items-center gap-2">
+          <Navigation className="w-6 h-6 text-emerald-400" /> BIYAHE LIVE
+        </h1>
         <div className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 ${isLive ? (isOutOfService ? 'bg-slate-700 text-slate-300' : 'bg-emerald-500 text-slate-950') : 'bg-slate-800 text-slate-400'}`}>
           <span className={`w-2 h-2 rounded-full ${isLive && !isOutOfService ? 'bg-slate-950 animate-ping' : 'bg-slate-500'}`}></span>
           {isLive ? (isOutOfService ? "OUT OF SERVICE" : "LIVE") : "OFFLINE"}
         </div>
       </div>
 
-      <div className="w-full max-w-md bg-slate-800 rounded-2xl p-5 shadow-xl border border-slate-700 space-y-4 mb-20">
+      <div className="w-full max-w-md bg-slate-800 rounded-2xl p-5 shadow-xl border border-slate-700 space-y-4 mt-4 mb-24">
         
-        {/* 🚀 COMPACT VEHICLE DETAILS */}
+        {/* COMPACT VEHICLE DETAILS */}
         <div className="flex items-center justify-between bg-slate-900 p-3 rounded-xl border border-slate-700">
           <div className="flex items-center gap-2">
             {(["Van", "Bus", "Taxi", "Tricycle"] as const).map(type => (
@@ -351,7 +353,7 @@ export default function DriverPage() {
           <button onClick={() => setIsAircon(!isAircon)} className={`text-[10px] font-bold px-2 py-1 rounded ${isAircon ? 'bg-blue-950 text-blue-400' : 'bg-slate-800 text-slate-400'}`}>{isAircon ? "❄️ Aircon" : "🌬️ Non"}</button>
         </div>
 
-        {/* 🚀 COMPACT EARNINGS & FARE */}
+        {/* COMPACT EARNINGS & FARE */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex flex-col items-center justify-center">
             <p className="text-[10px] text-slate-400">KITA</p>
@@ -364,7 +366,7 @@ export default function DriverPage() {
           </div>
         </div>
         
-        {/* 🚀 COMPACT SEAT COUNTER */}
+        {/* COMPACT SEAT COUNTER */}
         <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
           <p className="text-[10px] text-slate-400 text-center mb-2">AVAILABLE SEATS ({seatsTotal} Total)</p>
           <div className="flex items-center justify-between">
@@ -374,7 +376,7 @@ export default function DriverPage() {
           </div>
         </div>
 
-        {/* 🚀 COMPACT RESERVED & SETTINGS ROW */}
+        {/* COMPACT RESERVED & SETTINGS ROW */}
         <div className="grid grid-cols-2 gap-2">
           <button onClick={toggleReservedSeats} className={`p-2 rounded-xl border flex items-center justify-center gap-1 transition-all ${isReservedActive ? 'bg-amber-950/50 border-amber-500/50 text-amber-400' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>
             <ShieldAlert className="w-4 h-4" /> <span className="text-xs font-bold">Reserved</span> {isReservedActive && <span className="text-[10px]">{formatTime(reservedTimer)}</span>}
@@ -384,13 +386,13 @@ export default function DriverPage() {
           </button>
         </div>
 
-        {/* 🚀 START/END TRIP BUTTON (Sticky sa baba) */}
+        {/* START/END TRIP BUTTON (Sticky sa baba) */}
         <div className="fixed bottom-0 left-0 w-full p-4 bg-slate-900 border-t border-slate-800 flex justify-center z-40">
           {!isLive ? (<button onClick={handleStartTrip} className="w-full max-w-md py-4 bg-emerald-500 text-slate-950 font-black text-lg rounded-2xl">START TRIP</button>) : (<button onClick={handleEndTrip} className="w-full max-w-md py-4 bg-rose-600 text-white font-black text-lg rounded-2xl">END TRIP</button>)}
         </div>
       </div>
 
-      {/* SETTINGS MODAL (GCash, Terminal Mode, Out of Service, Emergency, Plate) */}
+      {/* SETTINGS MODAL */}
       {showSettings && (
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200 space-y-4">
