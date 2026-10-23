@@ -7,7 +7,7 @@ import { ref, onValue, set, remove } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Ticket, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings
 } from "lucide-react";
 
 // 🚨 LTFRB REGION XI FARE RATES
@@ -18,13 +18,14 @@ const FARE_RATES = {
   cityBusOrdinary: { base: 15, baseKm: 5, perKm: 2.49, name: "City Bus (Ordinary)" },
   cityBusAircon: { base: 18, baseKm: 5, perKm: 2.97, name: "City Bus (Aircon)" },
   uvExpress: { base: 0, baseKm: 0, perKm: 2.60, name: "UV Express" },
+  motor: { base: 10, baseKm: 2, perKm: 1.50, name: "Motor" },
 };
 
 interface TripData {
   tripId: string; status: "Available" | "Standing" | "Full";
   location: { lat: number; lng: number }; seatsAvailable?: number; fare?: number;
   isOutOfService?: boolean; isEmergency?: boolean; isGcashEnabled?: boolean;
-  vehicleType?: "Van" | "Bus" | "Taxi" | "Tricycle"; isAircon?: boolean; plateNumber?: string;
+  vehicleType?: "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor"; isAircon?: boolean; plateNumber?: string;
   updatedAt: number; reports?: { correct: number; wrong: number }; isVerified?: boolean;
 }
 interface CommunityAlert { id: string; type: string; timestamp: number; }
@@ -57,6 +58,7 @@ const computeFare = (distanceKm: number, vehicleType: string, isAircon: boolean,
   else if (vehicleType === "Tricycle") rate = FARE_RATES.jeepney;
   else if (vehicleType === "Taxi") rate = FARE_RATES.cityBusOrdinary;
   else if (vehicleType === "Van") rate = FARE_RATES.uvExpress;
+  else if (vehicleType === "Motor") rate = FARE_RATES.motor;
 
   let baseFare = rate.base;
   let perKm = rate.perKm;
@@ -90,7 +92,7 @@ export default function HomePage() {
   const [isWaiting, setIsWaiting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFareMatrix, setShowFareMatrix] = useState(false);
-  const [vehicleFilter, setVehicleFilter] = useState<"All" | "Van" | "Bus" | "Taxi" | "Tricycle">("All");
+  const [vehicleFilter, setVehicleFilter] = useState<"All" | "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor">("All");
   const [comfortFilter, setComfortFilter] = useState<"All" | "Aircon" | "Non-Aircon">("All");
   const [emergencyData, setEmergencyData] = useState<any>(null);
   const [lastReportTime, setLastReportTime] = useState(0);
@@ -100,6 +102,7 @@ export default function HomePage() {
   const [onboardStep, setOnboardStep] = useState(0);
   const [waitingCount, setWaitingCount] = useState(0);
   const [isDiscounted, setIsDiscounted] = useState(false);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   // 🚨 SLEEP ALARM STATE
   const [showSleepAlarm, setShowSleepAlarm] = useState(false);
@@ -116,8 +119,6 @@ export default function HomePage() {
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
-
-  // 🚨 SLEEP ALARM LISTENER
 
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
@@ -204,7 +205,19 @@ export default function HomePage() {
       const distB = getDistance(selectedShed.lat, selectedShed.lng, b.location.lat, b.location.lng);
       return distA - distB;
     });
-  }, [trips, selectedShed, vehicleFilter, comfortFilter]);  // 🚨 SLEEP ALARM LISTENER (Inilipat dito para hindi mag-error)
+  }, [trips, selectedShed, vehicleFilter, comfortFilter]);
+
+  useEffect(() => {
+    if (sortedAndFilteredTrips.length > 0) {
+      const nearestTrip = sortedAndFilteredTrips[0];
+      const distance = getDistance(selectedShed.lat, selectedShed.lng, nearestTrip.location.lat, nearestTrip.location.lng);
+      if (distance <= 0.5 && lastMilestone < 3) { if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]); alert("🔔 500m away! Hapit na moabot."); setLastMilestone(3); }
+      else if (distance <= 1 && lastMilestone < 2) { if (navigator.vibrate) navigator.vibrate([100, 50, 100]); alert("⏳ 1km away! Paghanda na."); setLastMilestone(2); }
+      else if (distance <= 2 && lastMilestone < 1) { if (navigator.vibrate) navigator.vibrate([100]); alert("🚐 2km away! Hapit na."); setLastMilestone(1); }
+    }
+  }, [sortedAndFilteredTrips, selectedShed, lastMilestone]);
+
+  // 🚨 SLEEP ALARM LISTENER
   useEffect(() => {
     if (!sleepAlarmActive || !sleepDestination) return;
     if (sortedAndFilteredTrips.length === 0) return;
@@ -225,16 +238,6 @@ export default function HomePage() {
       setSleepDestination(null);
     }
   }, [sortedAndFilteredTrips, sleepAlarmActive, sleepDestination]);
-
-  useEffect(() => {
-    if (sortedAndFilteredTrips.length > 0) {
-      const nearestTrip = sortedAndFilteredTrips[0];
-      const distance = getDistance(selectedShed.lat, selectedShed.lng, nearestTrip.location.lat, nearestTrip.location.lng);
-      if (distance <= 0.5 && lastMilestone < 3) { if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]); alert("🔔 500m away! Hapit na moabot."); setLastMilestone(3); }
-      else if (distance <= 1 && lastMilestone < 2) { if (navigator.vibrate) navigator.vibrate([100, 50, 100]); alert("⏳ 1km away! Paghanda na."); setLastMilestone(2); }
-      else if (distance <= 2 && lastMilestone < 1) { if (navigator.vibrate) navigator.vibrate([100]); alert("🚐 2km away! Hapit na."); setLastMilestone(1); }
-    }
-  }, [sortedAndFilteredTrips, selectedShed, lastMilestone]);
 
   const getMinutesAgo = (timestamp: number) => Math.max(0, Math.floor((now - timestamp) / 60000));
   const handleFavoriteShed = () => { if (isFavorite) { localStorage.removeItem("favorite_shed"); setIsFavorite(false); } else { localStorage.setItem("favorite_shed", selectedShed.id); setIsFavorite(true); } };
@@ -345,20 +348,60 @@ export default function HomePage() {
 
       <main className="w-full max-w-md space-y-4 pt-4">
         
-        <div className="space-y-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input type="text" placeholder="Search vehicle or type..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all" />
-          </div>
-
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {["All", "Van", "Bus", "Taxi", "Tricycle"].map(v => (
-              <button key={v} onClick={() => setVehicleFilter(v as any)} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap ${vehicleFilter === v ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>{v}</button>
-            ))}
-            <button onClick={() => setComfortFilter(comfortFilter === "Aircon" ? "All" : "Aircon")} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap ${comfortFilter === "Aircon" ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-300'}`}>❄️ Aircon</button>
-          </div>
+        {/* 🚨 CORE BUTTONS */}
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={handleWaitingPing} disabled={isWaiting} className={`py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 transition-all ${isWaiting ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/50 cursor-not-allowed' : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'}`}>
+            <BellRing className="w-6 h-6" /> {isWaiting ? "Waiting..." : "Naghihintay Ako"}
+          </button>
+          <button onClick={handleRequestStop} className="py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg">
+            <Bell className="w-6 h-6" /> Bababa Ako
+          </button>
         </div>
 
+        {/* 🚨 SLEEP ALARM */}
+        <button 
+          onClick={() => setShowSleepAlarm(true)}
+          className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${sleepAlarmActive ? 'bg-indigo-500 text-white animate-pulse' : 'bg-slate-800 text-indigo-400 border border-indigo-900/50'}`}
+        >
+          <Bed className="w-5 h-5" /> {sleepAlarmActive ? `Pahinga Mode ON (${sleepDestination})` : "Sleep Alarm / Pahinga Mode"}
+        </button>
+
+        {/* 🚨 MORE OPTIONS TOGGLE */}
+        <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+          <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">More Options</span>
+          <button onClick={() => setShowMoreOptions(!showMoreOptions)} className="p-1.5 bg-slate-800 rounded-lg text-slate-300 hover:text-white transition-colors">
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* 🚨 MORE OPTIONS CONTENT */}
+        {showMoreOptions && (
+          <div className="space-y-3 p-4 bg-slate-900/50 border border-slate-800 rounded-2xl animate-in slide-in-from-top-2">
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input type="text" placeholder="Search vehicle or type..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none" />
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                {["All", "Van", "Bus", "Taxi", "Tricycle", "Motor"].map(v => (
+                  <button key={v} onClick={() => setVehicleFilter(v as any)} className={`px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap ${vehicleFilter === v ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{v}</button>
+                ))}
+              </div>
+            </div>
+            <button onClick={() => setShowReportModal(true)} className="w-full py-2 bg-amber-500/10 border border-amber-500/50 text-amber-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+              <Megaphone className="w-3 h-3" /> Mag-report ng Sitwasyon
+            </button>
+            <div className="flex items-center justify-between bg-slate-800 p-2 rounded-lg">
+              <div className="flex items-center gap-1">
+                <Users className="w-3 h-3 text-amber-400" />
+                <p className="text-[10px] font-bold text-white">Discounted Fare (20%)</p>
+              </div>
+              <button onClick={() => setIsDiscounted(!isDiscounted)} className={`px-2 py-1 rounded text-[10px] font-bold ${isDiscounted ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-slate-400'}`}>{isDiscounted ? "ON" : "OFF"}</button>
+            </div>
+          </div>
+        )}
+
+        {/* 🚨 SHED SELECTOR */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
             <div className="relative">
@@ -378,50 +421,12 @@ export default function HomePage() {
               <button onClick={handleFavoriteShed} className={`p-1.5 rounded-lg transition-colors ${isFavorite ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'}`}><Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} /></button>
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
-            <span className="text-xs text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {getMinutesAgo(lastRefresh) === 0 ? "Ngayon lang" : `${getMinutesAgo(lastRefresh)} min`}</span>
-            <div className="flex items-center gap-2">
-              <Link href="/commuter/ticket" className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 rounded-lg text-xs font-bold hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-1"><Ticket className="w-3 h-3" /> Ticket</Link>
-              <button onClick={() => setShowReportModal(true)} className="px-3 py-1 bg-amber-500/10 border border-amber-500/50 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500 hover:text-white transition-all flex items-center gap-1"><Megaphone className="w-3 h-3" /> Report</button>
-              <button onClick={handleManualRefresh} className={`p-1.5 rounded-lg hover:bg-slate-800 transition-all ${loading ? 'animate-spin text-emerald-400' : 'text-slate-400'}`}><RefreshCw className="w-4 h-4" /></button>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={handleWaitingPing} disabled={isWaiting} className={`py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all ${isWaiting ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/50 cursor-not-allowed' : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'}`}><BellRing className="w-3 h-3" /> {isWaiting ? "Waiting..." : "Naghihintay Ako"}</button>
-            <button onClick={handleRequestStop} className="py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg"><Bell className="w-3 h-3" /> Bababa Ako</button>
-          </div>
-
-          {/* 🚨 DISCOUNT TOGGLE */}
-          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 mt-2">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-amber-400" />
-              <div>
-                <p className="text-sm font-bold text-white">Discounted Fare (20%)</p>
-                <p className="text-[10px] text-slate-400">Student, Senior, PWD, Pregnant</p>
-              </div>
-            </div>
-            <button 
-              onClick={() => setIsDiscounted(!isDiscounted)} 
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isDiscounted ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}
-            >
-              {isDiscounted ? "ON" : "OFF"}
-            </button>
-          </div>
-
-          {/* 🚨 SLEEP ALARM BUTTON */}
-          <button 
-            onClick={() => setShowSleepAlarm(true)}
-            className={`w-full py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all ${sleepAlarmActive ? 'bg-indigo-500 text-white animate-pulse' : 'bg-slate-800 text-indigo-400 border border-indigo-900/50'}`}
-          >
-            <Bed className="w-3 h-3" /> {sleepAlarmActive ? `Pahinga Mode ON (${sleepDestination})` : "Sleep Alarm / Pahinga Mode"}
-          </button>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 flex items-center justify-between">
-            <span className="text-xs text-slate-400 flex items-center gap-1"><Users className="w-3 h-3" /> Naghihintay sa Shed:</span>
-            <span className={`text-xs font-bold ${waitingCount > 5 ? 'text-rose-400' : waitingCount > 2 ? 'text-amber-400' : 'text-emerald-400'}`}>{waitingCount} {waitingCount === 1 ? 'tao' : 'katao'}</span>
-          </div>
+        {/* 🚨 CROWD LEVEL */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 flex items-center justify-between">
+          <span className="text-xs text-slate-400 flex items-center gap-1"><Users className="w-3 h-3" /> Naghihintay sa Shed:</span>
+          <span className={`text-xs font-bold ${waitingCount > 5 ? 'text-rose-400' : waitingCount > 2 ? 'text-amber-400' : 'text-emerald-400'}`}>{waitingCount} {waitingCount === 1 ? 'tao' : 'katao'}</span>
         </div>
 
         {isOffline && (<div className="p-4 bg-amber-950/90 border border-amber-600/50 rounded-xl flex items-center gap-3 text-amber-200"><WifiOff className="w-6 h-6 shrink-0 text-amber-400" /><div><p className="font-bold text-sm">Walang Koneksyon</p></div></div>)}
@@ -614,10 +619,14 @@ export default function HomePage() {
                 <span className="text-sm text-slate-300">Taxi (Metered)</span>
                 <span className="text-sm font-black text-amber-400">₱45-₱50 flagdown</span>
               </div>
+              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <span className="text-sm text-slate-300">Motor/Tricycle</span>
+                <span className="text-sm font-black text-amber-400">₱10 + ₱1.50/km</span>
+              </div>
             </div>
             <div className="mt-4 pt-4 border-t border-slate-800">
               <p className="text-[10px] text-slate-500 text-center leading-relaxed">
-                💡 20% discount para sa Student, Senior, PWD, at Pregnant. I-on ang toggle sa Commuter View.
+                💡 20% discount para sa Student, Senior, PWD, at Pregnant. I-on ang toggle sa More Options.
               </p>
             </div>
             <button onClick={() => setShowFareMatrix(false)} className="w-full mt-4 py-3 bg-amber-500 text-slate-950 font-black rounded-xl text-sm hover:bg-amber-400 transition-all">Close</button>
