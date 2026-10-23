@@ -22,7 +22,10 @@ export default function DriverPage() {
   const [seatsTotal, setSeatsTotal] = useState(14); 
   const [seatsAvailable, setSeatsAvailable] = useState(14);
 
-  const [fare, setFare] = useState(15);
+  // 🚨 EDITABLE FARE
+  const [fareInput, setFareInput] = useState<string>("15");
+  const fare = Number(fareInput) || 0;
+
   const [earnings, setEarnings] = useState(0);
   const [isOutOfService, setIsOutOfService] = useState(false);
   const [isEmergency, setIsEmergency] = useState(false);
@@ -115,6 +118,7 @@ export default function DriverPage() {
     const savedPlate = localStorage.getItem("biyahe_plate");
     const savedAircon = localStorage.getItem("biyahe_aircon");
     const savedSeatsTotal = localStorage.getItem("biyahe_seats_total");
+    const savedFare = localStorage.getItem("biyahe_fare");
 
     if (savedLive === "true") setIsLive(true);
     if (savedSeats) setSeatsAvailable(parseInt(savedSeats));
@@ -124,6 +128,7 @@ export default function DriverPage() {
     if (savedPlate) setPlateNumber(savedPlate);
     if (savedAircon) setIsAircon(savedAircon === "true");
     if (savedSeatsTotal) setSeatsTotal(parseInt(savedSeatsTotal));
+    if (savedFare) setFareInput(savedFare);
 
     const unsubSOS = onValue(ref(database, "sos_alert"), (snap) => {
       if (snap.exists()) { setSosAlert(snap.val()); setIsSosAcknowledged(false); startAlarm(); }
@@ -159,7 +164,8 @@ export default function DriverPage() {
     localStorage.setItem("biyahe_plate", plateNumber);
     localStorage.setItem("biyahe_aircon", isAircon.toString());
     localStorage.setItem("biyahe_seats_total", seatsTotal.toString());
-  }, [isLive, seatsAvailable, isGcashEnabled, vehicleType, plateNumber, isAircon, seatsTotal]);
+    localStorage.setItem("biyahe_fare", fareInput);
+  }, [isLive, seatsAvailable, isGcashEnabled, vehicleType, plateNumber, isAircon, seatsTotal, fareInput]);
 
   const handleVehicleTypeChange = (type: "Van" | "Bus" | "Taxi" | "Tricycle") => {
     setVehicleType(type);
@@ -288,7 +294,7 @@ export default function DriverPage() {
   };
 
   return (
-    <div className={`min-h-screen bg-slate-900 text-white flex flex-col items-center relative ${isEmergency ? 'bg-rose-950' : ''}`}>
+    <div className={`min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center relative p-4 ${isEmergency ? 'bg-rose-950' : ''}`}>
       
       {/* 🚨 ALERTS STACK */}
       <div className="fixed top-0 left-0 w-full z-[100] flex flex-col gap-2 p-2 max-w-md mx-auto">
@@ -324,24 +330,15 @@ export default function DriverPage() {
         )}
       </div>
 
-      {/* FLOATING BUTTONS */}
-      <div className="fixed bottom-24 right-6 z-50 flex flex-col gap-3">
-        <a href="https://waze.com/ul" target="_blank" rel="noopener noreferrer" className="p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl transition-all flex items-center justify-center"><Map className="w-6 h-6" /></a>
-        {isLive && !isTerminalMode && (<Link href="/driver/scan" className="p-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full shadow-2xl transition-all flex items-center gap-2"><QrCode className="w-6 h-6" /><span className="font-bold pr-2">Scan</span></Link>)}
-      </div>
-
-      {/* HEADER + TRIP STATUS (Sticky sa Taas) */}
-      <div className="w-full max-w-md sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md p-4 border-b border-slate-800 flex items-center justify-between mt-2">
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          <Navigation className="w-6 h-6 text-emerald-400" /> BIYAHE LIVE
-        </h1>
+      <div className="w-full max-w-md flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold flex items-center gap-2"><Navigation className="w-6 h-6 text-emerald-400" /> BIYAHE LIVE</h1>
         <div className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 ${isLive ? (isOutOfService ? 'bg-slate-700 text-slate-300' : 'bg-emerald-500 text-slate-950') : 'bg-slate-800 text-slate-400'}`}>
           <span className={`w-2 h-2 rounded-full ${isLive && !isOutOfService ? 'bg-slate-950 animate-ping' : 'bg-slate-500'}`}></span>
           {isLive ? (isOutOfService ? "OUT OF SERVICE" : "LIVE") : "OFFLINE"}
         </div>
       </div>
 
-      <div className="w-full max-w-md bg-slate-800 rounded-2xl p-5 shadow-xl border border-slate-700 space-y-4 mt-4 mb-24">
+      <div className="w-full max-w-md bg-slate-800 rounded-2xl p-5 shadow-xl border border-slate-700 space-y-4">
         
         {/* COMPACT VEHICLE DETAILS */}
         <div className="flex items-center justify-between bg-slate-900 p-3 rounded-xl border border-slate-700">
@@ -359,10 +356,19 @@ export default function DriverPage() {
             <p className="text-[10px] text-slate-400">KITA</p>
             <p className="text-lg font-black text-white">₱{earnings}</p>
           </div>
-          <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex items-center justify-between">
-            <button onClick={() => setFare(Math.max(5, fare - 5))} className="p-1 bg-slate-800 rounded text-slate-300"><Minus className="w-4 h-4" /></button>
-            <div className="text-center"><p className="text-[10px] text-slate-400">PAMASAHE</p><p className="text-lg font-black text-amber-400">₱{fare}</p></div>
-            <button onClick={() => setFare(fare + 5)} className="p-1 bg-slate-800 rounded text-slate-300"><Plus className="w-4 h-4" /></button>
+          
+          {/* 🚨 EDITABLE FARE */}
+          <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex flex-col items-center justify-center">
+            <p className="text-[10px] text-slate-400 mb-1">PAMASAHE</p>
+            <div className="flex items-center gap-1">
+              <span className="text-lg font-black text-amber-400">₱</span>
+              <input 
+                type="number" 
+                value={fareInput} 
+                onChange={(e) => setFareInput(e.target.value)}
+                className="w-16 bg-transparent text-lg font-black text-amber-400 text-center focus:outline-none border-b border-amber-400/30"
+              />
+            </div>
           </div>
         </div>
         
@@ -386,9 +392,13 @@ export default function DriverPage() {
           </button>
         </div>
 
-        {/* START/END TRIP BUTTON (Sticky sa baba) */}
-        <div className="fixed bottom-0 left-0 w-full p-4 bg-slate-900 border-t border-slate-800 flex justify-center z-40">
-          {!isLive ? (<button onClick={handleStartTrip} className="w-full max-w-md py-4 bg-emerald-500 text-slate-950 font-black text-lg rounded-2xl">START TRIP</button>) : (<button onClick={handleEndTrip} className="w-full max-w-md py-4 bg-rose-600 text-white font-black text-lg rounded-2xl">END TRIP</button>)}
+        {/* START/END TRIP BUTTON (Nasa loob na ng card) */}
+        <div className="pt-2">
+          {!isLive ? (
+            <button onClick={handleStartTrip} className="w-full py-4 bg-emerald-500 text-slate-950 font-black text-lg rounded-2xl hover:bg-emerald-400 transition-all">START TRIP</button>
+          ) : (
+            <button onClick={handleEndTrip} className="w-full py-4 bg-rose-600 text-white font-black text-lg rounded-2xl hover:bg-rose-500 transition-all">END TRIP</button>
+          )}
         </div>
       </div>
 
