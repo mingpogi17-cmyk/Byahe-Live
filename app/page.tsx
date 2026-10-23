@@ -10,18 +10,14 @@ import {
   Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users
 } from "lucide-react";
 
-// 🚨 FARE MATRIX (Davao del Sur Only)
-const FARE_MATRIX: { [key: string]: { [key: string]: number } } = {
-  "Sta. Cruz": { "Digos": 15, "Bansalan": 25, "Hagonoy": 20 },
-  "Digos": { "Sta. Cruz": 15, "Bansalan": 20, "Kiblawan": 20, "Padada": 12, "Matanao": 15 },
-  "Bansalan": { "Digos": 20, "Sta. Cruz": 25, "Magsaysay": 15 },
-  "Hagonoy": { "Digos": 20, "Sta. Cruz": 20, "Padada": 10 },
-  "Magsaysay": { "Bansalan": 15 },
-  "Matanao": { "Digos": 15, "Bansalan": 15 },
-  "Padada": { "Digos": 12, "Hagonoy": 10, "Sulop": 10 },
-  "Sulop": { "Padada": 10, "Malalag": 10 },
-  "Malalag": { "Sulop": 10 },
-  "Kiblawan": { "Digos": 20 },
+// 🚨 LTFRB REGION XI FARE RATES
+const FARE_RATES = {
+  jeepney: { base: 14, baseKm: 4, perKm: 2.00, name: "Traditional Jeepney" },
+  modernJeep: { base: 17, baseKm: 4, perKm: 2.40, name: "Modern Jeepney" },
+  provincialBus: { base: 12, baseKm: 5, perKm: 2.20, name: "Provincial Bus" },
+  cityBusOrdinary: { base: 15, baseKm: 5, perKm: 2.49, name: "City Bus (Ordinary)" },
+  cityBusAircon: { base: 18, baseKm: 5, perKm: 2.97, name: "City Bus (Aircon)" },
+  uvExpress: { base: 0, baseKm: 0, perKm: 2.60, name: "UV Express" },
 };
 
 interface TripData {
@@ -54,6 +50,27 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 };
 
+// 🚨 FARE COMPUTATION FUNCTION (With Discount)
+const computeFare = (distanceKm: number, vehicleType: string, isAircon: boolean, discounted: boolean = false) => {
+  let rate = FARE_RATES.uvExpress; // Default sa Van
+  if (vehicleType === "Bus") rate = isAircon ? FARE_RATES.cityBusAircon : FARE_RATES.provincialBus;
+  else if (vehicleType === "Tricycle") rate = FARE_RATES.jeepney;
+  else if (vehicleType === "Taxi") rate = FARE_RATES.cityBusOrdinary;
+  else if (vehicleType === "Van") rate = FARE_RATES.uvExpress;
+
+  let baseFare = rate.base;
+  let perKm = rate.perKm;
+
+  // 🚨 20% DISCOUNT (Student, Senior, PWD, Pregnant)
+  if (discounted) {
+    baseFare = baseFare * 0.8;
+    perKm = perKm * 0.8;
+  }
+
+  if (distanceKm <= rate.baseKm) return baseFare;
+  return baseFare + ((distanceKm - rate.baseKm) * perKm);
+};
+
 export default function HomePage() {
   const [trips, setTrips] = useState<TripData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +100,9 @@ export default function HomePage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardStep, setOnboardStep] = useState(0);
   const [waitingCount, setWaitingCount] = useState(0);
+  
+  // 🚨 DISCOUNT STATE
+  const [isDiscounted, setIsDiscounted] = useState(false);
 
   useEffect(() => {
     const savedPoints = localStorage.getItem("biyahe_points");
@@ -260,10 +280,9 @@ export default function HomePage() {
     if (!searchQuery) return sortedAndFilteredTrips;
     const query = searchQuery.toLowerCase();
     return sortedAndFilteredTrips.filter(trip => {
-      const fare = FARE_MATRIX[selectedShed.name]?.[trip.tripId] || 0;
-      return trip.tripId.toLowerCase().includes(query) || String(fare).includes(query) || trip.vehicleType?.toLowerCase().includes(query);
+      return trip.tripId.toLowerCase().includes(query) || trip.vehicleType?.toLowerCase().includes(query);
     });
-  }, [sortedAndFilteredTrips, searchQuery, selectedShed]);
+  }, [sortedAndFilteredTrips, searchQuery]);
 
   const alertStyles = (type: string) => {
     switch(type) {
@@ -305,7 +324,7 @@ export default function HomePage() {
         <div className="space-y-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input type="text" placeholder="Search destination or fare..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all" />
+            <input type="text" placeholder="Search vehicle or type..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all" />
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -331,7 +350,7 @@ export default function HomePage() {
               )}
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={() => setShowFareMatrix(true)} className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-950/30 px-2 py-1 rounded-md border border-amber-900/50"><Wallet className="w-3 h-3" /> Fare Matrix</button>
+              <button onClick={() => setShowFareMatrix(true)} className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-950/30 px-2 py-1 rounded-md border border-amber-900/50"><Wallet className="w-3 h-3" /> Fare Guide</button>
               <button onClick={handleFavoriteShed} className={`p-1.5 rounded-lg transition-colors ${isFavorite ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'}`}><Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} /></button>
             </div>
           </div>
@@ -348,6 +367,23 @@ export default function HomePage() {
           <div className="grid grid-cols-2 gap-2">
             <button onClick={handleWaitingPing} disabled={isWaiting} className={`py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all ${isWaiting ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/50 cursor-not-allowed' : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'}`}><BellRing className="w-3 h-3" /> {isWaiting ? "Waiting..." : "Naghihintay Ako"}</button>
             <button onClick={handleRequestStop} className="py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg"><Bell className="w-3 h-3" /> Munaog Ko</button>
+          </div>
+
+          {/* 🚨 DISCOUNT TOGGLE */}
+          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 mt-2">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-amber-400" />
+              <div>
+                <p className="text-sm font-bold text-white">Discounted Fare (20%)</p>
+                <p className="text-[10px] text-slate-400">Student, Senior, PWD, Pregnant</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsDiscounted(!isDiscounted)} 
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isDiscounted ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}
+            >
+              {isDiscounted ? "ON" : "OFF"}
+            </button>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 flex items-center justify-between">
@@ -371,7 +407,11 @@ export default function HomePage() {
               const distance = getDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
               const trustScore = trip.reports ? trip.reports.correct - trip.reports.wrong : 0; const isLowTrust = trustScore < -2;
               const hasAlarm = alarms[trip.tripId];
-              const fareDisplay = FARE_MATRIX[selectedShed.name]?.[trip.tripId] ? `₱${FARE_MATRIX[selectedShed.name][trip.tripId]}` : `₱${trip.fare || 15}`;
+              
+              // 🚨 COMPUTE FARE BASE SA DISTANCE + DISCOUNT
+              const estimatedFare = computeFare(distance, trip.vehicleType || "Van", trip.isAircon || false, isDiscounted);
+              const fareDisplay = `₱${estimatedFare.toFixed(0)}`;
+              
               const isReported = reportedTrips[trip.tripId];
               const VehicleIcon = trip.vehicleType === "Bus" ? Bus : trip.vehicleType === "Taxi" ? Car : trip.vehicleType === "Tricycle" ? Car : Bus;
 
@@ -389,7 +429,7 @@ export default function HomePage() {
                       <span className={`px-3 py-1 rounded-full text-xs font-bold border ${trip.status === "Available" ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60" : trip.status === "Standing" ? "bg-amber-950/80 text-amber-300 border-amber-700/60" : "bg-rose-950/80 text-rose-300 border-rose-700/60"}`}>
                         {trip.status === "Available" ? `${trip.seatsAvailable ?? '?'} upuan` : trip.status === "Standing" ? "Tayo Lang" : "Puno Na"}
                       </span>
-                      <span className="text-[10px] font-bold text-amber-400 flex items-center gap-0.5"><Wallet className="w-3 h-3" /> {fareDisplay}</span>
+                      <span className="text-[10px] font-bold text-amber-400 flex items-center gap-0.5" title="Estimated fare base sa LTFRB Matrix + Distance"><Wallet className="w-3 h-3" /> {fareDisplay}</span>
                     </div>
                   </div>
                   
@@ -474,6 +514,55 @@ export default function HomePage() {
               <a href="tel:911" className="flex items-center justify-center w-full py-3 bg-rose-600 text-white font-black rounded-xl shadow-lg hover:bg-rose-500 transition-all gap-2"><Siren className="w-5 h-5" /> CALL 911 (National)</a>
             </div>
             <p className="text-center text-[10px] text-rose-300/80 mt-3">Kung wala ka sa {selectedShed.name}, i-dial ang 911.</p>
+          </div>
+        </div>
+      )}
+
+      {/* 🚨 FARE MATRIX MODAL */}
+      {showFareMatrix && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Wallet className="w-5 h-5 text-amber-400" /> Fare Guide</h2>
+              <button onClick={() => setShowFareMatrix(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="bg-amber-950/30 border border-amber-800/50 rounded-xl p-4 mb-4">
+              <p className="text-xs text-amber-300 leading-relaxed">
+                ⚠️ Base sa LTFRB Region XI Matrix. Ang aktwal na pamasahe ay depende sa exact distance, dagdag (aircon, bagahe), at driver. Paki-kumpirma sa konduktor.
+              </p>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <span className="text-sm text-slate-300">Provincial Bus (Ordinary)</span>
+                <span className="text-sm font-black text-amber-400">₱12 + ₱2.20/km</span>
+              </div>
+              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <span className="text-sm text-slate-300">City Bus (Aircon)</span>
+                <span className="text-sm font-black text-amber-400">₱18 + ₱2.97/km</span>
+              </div>
+              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <span className="text-sm text-slate-300">UV Express (Van)</span>
+                <span className="text-sm font-black text-amber-400">₱2.60/km</span>
+              </div>
+              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <span className="text-sm text-slate-300">Traditional Jeepney</span>
+                <span className="text-sm font-black text-amber-400">₱14 + ₱2.00/km</span>
+              </div>
+              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <span className="text-sm text-slate-300">Modern Jeepney</span>
+                <span className="text-sm font-black text-amber-400">₱17 + ₱2.40/km</span>
+              </div>
+              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <span className="text-sm text-slate-300">Taxi (Metered)</span>
+                <span className="text-sm font-black text-amber-400">₱45-₱50 flagdown</span>
+              </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-slate-800">
+              <p className="text-[10px] text-slate-500 text-center leading-relaxed">
+                💡 20% discount para sa Student, Senior, PWD, at Pregnant. I-on ang toggle sa Commuter View.
+              </p>
+            </div>
+            <button onClick={() => setShowFareMatrix(false)} className="w-full mt-4 py-3 bg-amber-500 text-slate-950 font-black rounded-xl text-sm hover:bg-amber-400 transition-all">Close</button>
           </div>
         </div>
       )}
