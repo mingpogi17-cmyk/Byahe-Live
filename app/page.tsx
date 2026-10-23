@@ -118,26 +118,6 @@ export default function HomePage() {
   }, []);
 
   // 🚨 SLEEP ALARM LISTENER
-  useEffect(() => {
-    if (!sleepAlarmActive || !sleepDestination) return;
-    if (sortedAndFilteredTrips.length === 0) return;
-    
-    const nearestTrip = sortedAndFilteredTrips[0];
-    const destShed = SHEDS.find(s => s.name === sleepDestination);
-    if (!destShed) return;
-
-    const distanceToDest = getDistance(
-      nearestTrip.location.lat, nearestTrip.location.lng, 
-      destShed.lat, destShed.lng
-    );
-
-    if (distanceToDest <= 2) {
-      if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
-      alert(`🔔 Gising na! Malapit na ang sasakyan sa ${sleepDestination} (${distanceToDest.toFixed(1)}km away).`);
-      setSleepAlarmActive(false);
-      setSleepDestination(null);
-    }
-  }, [sortedAndFilteredTrips, sleepAlarmActive, sleepDestination]);
 
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
@@ -410,7 +390,7 @@ export default function HomePage() {
           
           <div className="grid grid-cols-2 gap-2">
             <button onClick={handleWaitingPing} disabled={isWaiting} className={`py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all ${isWaiting ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/50 cursor-not-allowed' : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'}`}><BellRing className="w-3 h-3" /> {isWaiting ? "Waiting..." : "Naghihintay Ako"}</button>
-            <button onClick={handleRequestStop} className="py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg"><Bell className="w-3 h-3" /> Munaog Ko</button>
+            <button onClick={handleRequestStop} className="py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg"><Bell className="w-3 h-3" /> Bababa Ako</button>
           </div>
 
           {/* 🚨 DISCOUNT TOGGLE */}

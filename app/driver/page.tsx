@@ -324,7 +324,7 @@ export default function DriverPage() {
 
         {stopAlert && (
           <div className="p-3 rounded-xl bg-amber-950/90 border border-amber-500/50 shadow-lg flex items-center justify-between">
-            <div className="flex items-center gap-3"><UserMinus className="w-6 h-6 text-amber-400 animate-pulse" /><div><p className="font-bold text-white text-sm">May pasaherong munaog!</p><p className="text-xs text-amber-300">Sa {stopAlert.shed}.</p></div></div>
+            <div className="flex items-center gap-3"><UserMinus className="w-6 h-6 text-amber-400 animate-pulse" /><div><p className="font-bold text-white text-sm">May pasaherong bababa!</p><p className="text-xs text-amber-300">Sa {stopAlert.shed}.</p></div></div>
             <button onClick={dismissStop} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold">Okay</button>
           </div>
         )}
