@@ -224,7 +224,27 @@ export default function HomePage() {
       const distB = getDistance(selectedShed.lat, selectedShed.lng, b.location.lat, b.location.lng);
       return distA - distB;
     });
-  }, [trips, selectedShed, vehicleFilter, comfortFilter]);
+  }, [trips, selectedShed, vehicleFilter, comfortFilter]);  // 🚨 SLEEP ALARM LISTENER (Inilipat dito para hindi mag-error)
+  useEffect(() => {
+    if (!sleepAlarmActive || !sleepDestination) return;
+    if (sortedAndFilteredTrips.length === 0) return;
+    
+    const nearestTrip = sortedAndFilteredTrips[0];
+    const destShed = SHEDS.find(s => s.name === sleepDestination);
+    if (!destShed) return;
+
+    const distanceToDest = getDistance(
+      nearestTrip.location.lat, nearestTrip.location.lng, 
+      destShed.lat, destShed.lng
+    );
+
+    if (distanceToDest <= 2) {
+      if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+      alert(`🔔 Gising na! Malapit na ang sasakyan sa ${sleepDestination} (${distanceToDest.toFixed(1)}km away).`);
+      setSleepAlarmActive(false);
+      setSleepDestination(null);
+    }
+  }, [sortedAndFilteredTrips, sleepAlarmActive, sleepDestination]);
 
   useEffect(() => {
     if (sortedAndFilteredTrips.length > 0) {
