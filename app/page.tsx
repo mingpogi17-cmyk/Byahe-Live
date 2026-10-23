@@ -7,7 +7,7 @@ import { ref, onValue, set, remove } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Ticket, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed
 } from "lucide-react";
 
 // 🚨 LTFRB REGION XI FARE RATES
@@ -52,7 +52,7 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 
 // 🚨 FARE COMPUTATION FUNCTION (With Discount)
 const computeFare = (distanceKm: number, vehicleType: string, isAircon: boolean, discounted: boolean = false) => {
-  let rate = FARE_RATES.uvExpress; // Default sa Van
+  let rate = FARE_RATES.uvExpress;
   if (vehicleType === "Bus") rate = isAircon ? FARE_RATES.cityBusAircon : FARE_RATES.provincialBus;
   else if (vehicleType === "Tricycle") rate = FARE_RATES.jeepney;
   else if (vehicleType === "Taxi") rate = FARE_RATES.cityBusOrdinary;
@@ -61,7 +61,6 @@ const computeFare = (distanceKm: number, vehicleType: string, isAircon: boolean,
   let baseFare = rate.base;
   let perKm = rate.perKm;
 
-  // 🚨 20% DISCOUNT (Student, Senior, PWD, Pregnant)
   if (discounted) {
     baseFare = baseFare * 0.8;
     perKm = perKm * 0.8;
@@ -100,9 +99,12 @@ export default function HomePage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardStep, setOnboardStep] = useState(0);
   const [waitingCount, setWaitingCount] = useState(0);
-  
-  // 🚨 DISCOUNT STATE
   const [isDiscounted, setIsDiscounted] = useState(false);
+
+  // 🚨 SLEEP ALARM STATE
+  const [showSleepAlarm, setShowSleepAlarm] = useState(false);
+  const [sleepDestination, setSleepDestination] = useState<string | null>(null);
+  const [sleepAlarmActive, setSleepAlarmActive] = useState(false);
 
   useEffect(() => {
     const savedPoints = localStorage.getItem("biyahe_points");
@@ -114,6 +116,28 @@ export default function HomePage() {
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
+
+  // 🚨 SLEEP ALARM LISTENER
+  useEffect(() => {
+    if (!sleepAlarmActive || !sleepDestination) return;
+    if (sortedAndFilteredTrips.length === 0) return;
+    
+    const nearestTrip = sortedAndFilteredTrips[0];
+    const destShed = SHEDS.find(s => s.name === sleepDestination);
+    if (!destShed) return;
+
+    const distanceToDest = getDistance(
+      nearestTrip.location.lat, nearestTrip.location.lng, 
+      destShed.lat, destShed.lng
+    );
+
+    if (distanceToDest <= 2) {
+      if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+      alert(`🔔 Gising na! Malapit na ang sasakyan sa ${sleepDestination} (${distanceToDest.toFixed(1)}km away).`);
+      setSleepAlarmActive(false);
+      setSleepDestination(null);
+    }
+  }, [sortedAndFilteredTrips, sleepAlarmActive, sleepDestination]);
 
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
@@ -386,6 +410,14 @@ export default function HomePage() {
             </button>
           </div>
 
+          {/* 🚨 SLEEP ALARM BUTTON */}
+          <button 
+            onClick={() => setShowSleepAlarm(true)}
+            className={`w-full py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all ${sleepAlarmActive ? 'bg-indigo-500 text-white animate-pulse' : 'bg-slate-800 text-indigo-400 border border-indigo-900/50'}`}
+          >
+            <Bed className="w-3 h-3" /> {sleepAlarmActive ? `Pahinga Mode ON (${sleepDestination})` : "Sleep Alarm / Pahinga Mode"}
+          </button>
+
           <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 flex items-center justify-between">
             <span className="text-xs text-slate-400 flex items-center gap-1"><Users className="w-3 h-3" /> Naghihintay sa Shed:</span>
             <span className={`text-xs font-bold ${waitingCount > 5 ? 'text-rose-400' : waitingCount > 2 ? 'text-amber-400' : 'text-emerald-400'}`}>{waitingCount} {waitingCount === 1 ? 'tao' : 'katao'}</span>
@@ -408,7 +440,6 @@ export default function HomePage() {
               const trustScore = trip.reports ? trip.reports.correct - trip.reports.wrong : 0; const isLowTrust = trustScore < -2;
               const hasAlarm = alarms[trip.tripId];
               
-              // 🚨 COMPUTE FARE BASE SA DISTANCE + DISCOUNT
               const estimatedFare = computeFare(distance, trip.vehicleType || "Van", trip.isAircon || false, isDiscounted);
               const fareDisplay = `₱${estimatedFare.toFixed(0)}`;
               
@@ -461,6 +492,33 @@ export default function HomePage() {
         <p>Biyahe Live © 2026 · Developed by Ray Mar Olandria</p>
         <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline transition-colors">Privacy Policy & Terms of Service</Link>
       </footer>
+
+      {/* 🚨 SLEEP ALARM MODAL */}
+      {showSleepAlarm && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Bed className="w-5 h-5 text-indigo-400" /> Pahinga Mode (Sleep Alarm)</h2>
+              <button onClick={() => setShowSleepAlarm(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-xs text-slate-400 mb-4">Piliin ang iyong babaan. Mag-a-alert ang app kapag malapit na ang sasakyan (2km away).</p>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {SHEDS.map(shed => (
+                <button key={shed.id} onClick={() => { setSleepDestination(shed.name); setSleepAlarmActive(true); setShowSleepAlarm(false); if (navigator.vibrate) navigator.vibrate([100, 50, 100]); }} className={`w-full p-3 rounded-xl border text-left font-semibold text-sm transition-all flex items-center justify-between ${sleepDestination === shed.name ? 'bg-indigo-950/50 border-indigo-500 text-indigo-300' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
+                  {shed.name}
+                  {sleepDestination === shed.name && <CheckCircle2 className="w-4 h-4" />}
+                </button>
+              ))}
+            </div>
+            {sleepAlarmActive && (
+              <button onClick={() => { setSleepAlarmActive(false); setSleepDestination(null); }} className="w-full mt-4 py-2 bg-rose-600/20 border border-rose-600/50 text-rose-400 rounded-xl text-xs font-bold hover:bg-rose-600/30 transition-all">
+                Cancel Sleep Alarm
+              </button>
+            )}
+            <button onClick={() => setShowSleepAlarm(false)} className="w-full mt-2 py-3 bg-slate-800 text-white font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">Close</button>
+          </div>
+        </div>
+      )}
 
       {showReportModal && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
