@@ -6,7 +6,7 @@ import { database, ensureAuth } from "@/lib/firebase";
 import { ref, set, remove, update, onValue } from "firebase/database";
 import { 
   Navigation, Play, Square, CheckCircle2, QrCode, Minus, Plus, 
-  ShieldAlert, Timer, Wallet, Power, AlertOctagon, Map, Siren, X, Check, Upload, ImageIcon, Bell, Car, Bus, UserMinus
+  ShieldAlert, Timer, Wallet, Power, AlertOctagon, Map, Siren, X, Check, Upload, Bell, Car, Bus, UserMinus, Settings
 } from "lucide-react";
 
 export default function DriverPage() {
@@ -28,6 +28,7 @@ export default function DriverPage() {
   const [isEmergency, setIsEmergency] = useState(false);
   const [isTerminalMode, setIsTerminalMode] = useState(false);
   const [isGcashEnabled, setIsGcashEnabled] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // ALERTS
   const [sosAlert, setSosAlert] = useState<any>(null);
@@ -289,6 +290,7 @@ export default function DriverPage() {
   return (
     <div className={`min-h-screen bg-slate-900 text-white p-4 md:p-8 flex flex-col items-center justify-between relative ${isEmergency ? 'bg-rose-950' : ''}`}>
       
+      {/* 🚨 ALERTS STACK */}
       <div className="fixed top-0 left-0 w-full z-[100] flex flex-col gap-2 p-2 max-w-md mx-auto">
         {sosAlert && (
           <div className={`p-4 rounded-xl flex flex-col gap-3 shadow-2xl transition-all ${isSosAcknowledged ? 'bg-rose-950 border-b border-rose-600' : 'bg-rose-600 animate-pulse'}`}>
@@ -322,76 +324,103 @@ export default function DriverPage() {
         )}
       </div>
 
+      {/* FLOATING BUTTONS */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
         <a href="https://waze.com/ul" target="_blank" rel="noopener noreferrer" className="p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl transition-all flex items-center justify-center"><Map className="w-6 h-6" /></a>
         {isLive && !isTerminalMode && (<Link href="/driver/scan" className="p-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full shadow-2xl transition-all flex items-center gap-2"><QrCode className="w-6 h-6" /><span className="font-bold pr-2">Scan</span></Link>)}
       </div>
 
-      <div className="w-full max-w-md text-center my-4 pt-12">
-        <h1 className="text-2xl font-bold flex items-center justify-center gap-2"><Navigation className="w-8 h-8 text-emerald-400" /> BIYAHE LIVE - DRIVER</h1>
+      {/* HEADER + TRIP STATUS (Pinaka-taas) */}
+      <div className="w-full max-w-md my-4 pt-12 flex items-center justify-between">
+        <h1 className="text-2xl font-bold flex items-center gap-2"><Navigation className="w-8 h-8 text-emerald-400" /> BIYAHE LIVE</h1>
+        <div className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 ${isLive ? (isOutOfService ? 'bg-slate-700 text-slate-300' : 'bg-emerald-500 text-slate-950') : 'bg-slate-800 text-slate-400'}`}>
+          <span className={`w-2 h-2 rounded-full ${isLive && !isOutOfService ? 'bg-slate-950 animate-ping' : 'bg-slate-500'}`}></span>
+          {isLive ? (isOutOfService ? "OUT OF SERVICE" : "LIVE") : "OFFLINE"}
+        </div>
       </div>
 
-      <div className="w-full max-w-md bg-slate-800 rounded-2xl p-6 shadow-xl border border-slate-700 space-y-4">
+      <div className="w-full max-w-md bg-slate-800 rounded-2xl p-5 shadow-xl border border-slate-700 space-y-4 mb-20">
         
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 space-y-3">
-          <p className="text-xs text-slate-400 uppercase font-semibold">Vehicle Details</p>
-          <div className="grid grid-cols-2 gap-2">
+        {/* 🚀 COMPACT VEHICLE DETAILS */}
+        <div className="flex items-center justify-between bg-slate-900 p-3 rounded-xl border border-slate-700">
+          <div className="flex items-center gap-2">
             {(["Van", "Bus", "Taxi", "Tricycle"] as const).map(type => (
-              <button key={type} onClick={() => handleVehicleTypeChange(type)} className={`p-2 rounded-lg text-xs font-bold border flex items-center justify-center gap-1 ${vehicleType === type ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>{type === "Bus" ? <Bus className="w-3 h-3" /> : <Car className="w-3 h-3" />} {type}</button>
+              <button key={type} onClick={() => handleVehicleTypeChange(type)} className={`px-2 py-1 rounded text-[10px] font-bold ${vehicleType === type ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}`}>{type}</button>
             ))}
           </div>
-          <input type="text" placeholder="Plate Number (Optional)" value={plateNumber} onChange={(e) => setPlateNumber(e.target.value.toUpperCase())} className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs placeholder-slate-500" />
-          <button onClick={() => setIsAircon(!isAircon)} className={`w-full p-2 rounded-lg text-xs font-bold border ${isAircon ? 'bg-blue-950/50 border-blue-500/50 text-blue-400' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>{isAircon ? "❄️ Aircon" : "🌬️ Non-Aircon"}</button>
+          <button onClick={() => setIsAircon(!isAircon)} className={`text-[10px] font-bold px-2 py-1 rounded ${isAircon ? 'bg-blue-950 text-blue-400' : 'bg-slate-800 text-slate-400'}`}>{isAircon ? "❄️ Aircon" : "🌬️ Non"}</button>
         </div>
 
-        <div className={`p-4 rounded-xl flex items-center justify-between ${isLive ? (isOutOfService ? 'bg-slate-700 border-slate-500' : 'bg-emerald-950/80 border-emerald-500/50') : 'bg-slate-700/50'}`}>
-          <div><p className="text-xs text-slate-400 uppercase font-semibold">TRIP STATUS</p><p className="font-bold text-lg">{isLive ? (isOutOfService ? "OUT OF SERVICE" : "LIVE BROADCASTING") : "OFFLINE"}</p></div>
-          {isLive && !isOutOfService && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
-        </div>
-
-        {errorMessage && <div className="p-3 bg-rose-950 text-rose-200 rounded-lg text-sm">{errorMessage}</div>}
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center"><Wallet className="w-5 h-5 text-emerald-400 mb-1" /><p className="text-[10px] text-slate-400">KITA NGAYON</p><p className="text-xl font-black text-white">₱{earnings}</p></div>
-          <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center"><p className="text-[10px] text-slate-400 mb-1">PAMASAHE</p><div className="flex items-center gap-3"><button onClick={() => setFare(Math.max(5, fare - 5))} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 active:scale-90 transition-all"><Minus className="w-4 h-4" /></button><p className="text-xl font-black text-amber-400">₱{fare}</p><button onClick={() => setFare(fare + 5)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 active:scale-90 transition-all"><Plus className="w-4 h-4" /></button></div></div>
+        {/* 🚀 COMPACT EARNINGS & FARE */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex flex-col items-center justify-center">
+            <p className="text-[10px] text-slate-400">KITA</p>
+            <p className="text-lg font-black text-white">₱{earnings}</p>
+          </div>
+          <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex items-center justify-between">
+            <button onClick={() => setFare(Math.max(5, fare - 5))} className="p-1 bg-slate-800 rounded text-slate-300"><Minus className="w-4 h-4" /></button>
+            <div className="text-center"><p className="text-[10px] text-slate-400">PAMASAHE</p><p className="text-lg font-black text-amber-400">₱{fare}</p></div>
+            <button onClick={() => setFare(fare + 5)} className="p-1 bg-slate-800 rounded text-slate-300"><Plus className="w-4 h-4" /></button>
+          </div>
         </div>
         
+        {/* 🚀 COMPACT SEAT COUNTER */}
         <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
-          <p className="text-xs text-slate-400 text-center mb-3">AVAILABLE SEATS ({seatsTotal} Total)</p>
+          <p className="text-[10px] text-slate-400 text-center mb-2">AVAILABLE SEATS ({seatsTotal} Total)</p>
           <div className="flex items-center justify-between">
-            <button onClick={() => updateSeats(-1)} className="p-4 bg-slate-800 hover:bg-slate-700 rounded-xl active:scale-95"><Minus className="w-6 h-6" /></button>
+            <button onClick={() => updateSeats(-1)} className="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl active:scale-95"><Minus className="w-6 h-6" /></button>
             <span className={`text-4xl font-black ${seatsAvailable === 0 ? 'text-rose-500' : seatsAvailable <= 3 ? 'text-amber-400' : 'text-emerald-400'}`}>{seatsAvailable}</span>
-            <button onClick={() => updateSeats(1)} className="p-4 bg-slate-800 hover:bg-slate-700 rounded-xl active:scale-95"><Plus className="w-6 h-6" /></button>
+            <button onClick={() => updateSeats(1)} className="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl active:scale-95"><Plus className="w-6 h-6" /></button>
           </div>
         </div>
 
-        <div className={`p-4 rounded-xl border transition-all ${isReservedActive ? 'bg-amber-950/50 border-amber-500/50' : 'bg-slate-900 border-slate-700'}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2"><ShieldAlert className={`w-5 h-5 ${isReservedActive ? 'text-amber-400' : 'text-slate-500'}`} /><div><p className="text-sm font-bold">Reserved Seats</p><p className="text-[10px] text-slate-500">Para sa mga walang cellphone</p></div></div>
-            <button onClick={toggleReservedSeats} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isReservedActive ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>{isReservedActive ? "ON" : "OFF"}</button>
-          </div>
-          {isReservedActive && (<div className="mt-3 pt-3 border-t border-amber-800/30 flex items-center justify-between"><span className="text-xs text-amber-300 flex items-center gap-1"><Timer className="w-3 h-3" /> Timer:</span><span className="font-mono text-lg font-bold text-amber-400">{formatTime(reservedTimer)}</span></div>)}
-        </div>
-
+        {/* 🚀 COMPACT RESERVED & SETTINGS ROW */}
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => setIsTerminalMode(!isTerminalMode)} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${isTerminalMode ? 'bg-blue-950/50 border-blue-500/50 text-blue-400' : 'bg-slate-900 border-slate-700 text-slate-400'}`}><Map className="w-5 h-5" /><span className="text-xs font-bold text-center">TERMINAL MODE</span></button>
-          <button onClick={() => setIsOutOfService(!isOutOfService)} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${isOutOfService ? 'bg-slate-700 border-slate-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400'}`}><Power className="w-5 h-5" /><span className="text-xs font-bold text-center">OUT OF SERVICE</span></button>
+          <button onClick={toggleReservedSeats} className={`p-2 rounded-xl border flex items-center justify-center gap-1 transition-all ${isReservedActive ? 'bg-amber-950/50 border-amber-500/50 text-amber-400' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>
+            <ShieldAlert className="w-4 h-4" /> <span className="text-xs font-bold">Reserved</span> {isReservedActive && <span className="text-[10px]">{formatTime(reservedTimer)}</span>}
+          </button>
+          <button onClick={() => setShowSettings(true)} className="p-2 rounded-xl border bg-slate-900 border-slate-700 text-slate-400 flex items-center justify-center gap-1">
+            <Settings className="w-4 h-4" /> <span className="text-xs font-bold">Settings</span>
+          </button>
         </div>
 
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2"><Wallet className="w-5 h-5 text-blue-400" /><div><p className="text-sm font-bold">GCash Payment</p><p className="text-[10px] text-slate-500">Optional</p></div></div>
-            <button onClick={() => { if (!gcashQr) return alert("Mag-upload muna ng GCash QR."); setIsGcashEnabled(!isGcashEnabled); }} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isGcashEnabled ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400'}`}>{isGcashEnabled ? "ON" : "OFF"}</button>
-          </div>
-          {isGcashEnabled && (<div className="flex flex-col gap-2 pt-2 border-t border-slate-800"><input type="file" accept="image/*" ref={fileInputRef} onChange={handleGcashUpload} className="hidden" />{gcashQr ? (<div className="flex items-center justify-between bg-slate-800 p-2 rounded-lg"><img src={gcashQr} alt="GCash QR" className="w-12 h-12 object-contain bg-white rounded" /><button onClick={removeGcashQr} className="text-xs text-rose-400 font-bold px-2 py-1 hover:bg-rose-950/30 rounded">Remove</button></div>) : (<button onClick={() => fileInputRef.current?.click()} className="w-full py-2 bg-blue-950/30 border border-blue-900/50 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 hover:bg-blue-900/30"><Upload className="w-3 h-3" /> Upload GCash QR</button>)}</div>)}
+        {/* 🚀 START/END TRIP BUTTON (Sticky sa baba) */}
+        <div className="fixed bottom-0 left-0 w-full p-4 bg-slate-900 border-t border-slate-800 flex justify-center z-40">
+          {!isLive ? (<button onClick={handleStartTrip} className="w-full max-w-md py-4 bg-emerald-500 text-slate-950 font-black text-lg rounded-2xl">START TRIP</button>) : (<button onClick={handleEndTrip} className="w-full max-w-md py-4 bg-rose-600 text-white font-black text-lg rounded-2xl">END TRIP</button>)}
         </div>
-
-        <div className="grid grid-cols-1 gap-2">
-          <button onClick={toggleEmergency} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${isEmergency ? 'bg-rose-600 border-rose-400 text-white animate-pulse' : 'bg-slate-900 border-slate-700 text-rose-400'}`}><AlertOctagon className="w-5 h-5" /><span className="text-xs font-bold">EMERGENCY</span></button>
-        </div>
-
-        {!isLive ? (<button onClick={handleStartTrip} className="w-full py-5 bg-emerald-500 text-slate-950 font-black text-xl rounded-2xl mt-2">START TRIP</button>) : (<button onClick={handleEndTrip} className="w-full py-5 bg-rose-600 text-white font-black text-xl rounded-2xl mt-2">END TRIP</button>)}
       </div>
+
+      {/* SETTINGS MODAL (GCash, Terminal Mode, Out of Service, Emergency, Plate) */}
+      {showSettings && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200 space-y-4">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-bold text-white">Settings</h2>
+              <button onClick={() => setShowSettings(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <input type="text" placeholder="Plate Number (Optional)" value={plateNumber} onChange={(e) => setPlateNumber(e.target.value.toUpperCase())} className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs placeholder-slate-500" />
+
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setIsTerminalMode(!isTerminalMode)} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${isTerminalMode ? 'bg-blue-950/50 border-blue-500/50 text-blue-400' : 'bg-slate-800 border-slate-700 text-slate-400'}`}><Map className="w-5 h-5" /><span className="text-[10px] font-bold text-center">TERMINAL MODE</span></button>
+              <button onClick={() => setIsOutOfService(!isOutOfService)} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${isOutOfService ? 'bg-slate-700 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}><Power className="w-5 h-5" /><span className="text-[10px] font-bold text-center">OUT OF SERVICE</span></button>
+            </div>
+
+            <div className="bg-slate-800 p-3 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-white">GCash Payment</p>
+                <button onClick={() => { if (!gcashQr) return alert("Mag-upload muna ng GCash QR."); setIsGcashEnabled(!isGcashEnabled); }} className={`px-3 py-1 rounded-lg text-xs font-bold ${isGcashEnabled ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-400'}`}>{isGcashEnabled ? "ON" : "OFF"}</button>
+              </div>
+              <input type="file" accept="image/*" ref={fileInputRef} onChange={handleGcashUpload} className="hidden" />
+              {gcashQr ? (<div className="flex items-center justify-between bg-slate-900 p-2 rounded-lg"><img src={gcashQr} alt="GCash QR" className="w-10 h-10 object-contain bg-white rounded" /><button onClick={removeGcashQr} className="text-xs text-rose-400 font-bold px-2 py-1 hover:bg-rose-950/30 rounded">Remove</button></div>) : (<button onClick={() => fileInputRef.current?.click()} className="w-full py-2 bg-blue-950/30 border border-blue-900/50 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 hover:bg-blue-900/30"><Upload className="w-3 h-3" /> Upload GCash QR</button>)}
+            </div>
+
+            <button onClick={toggleEmergency} className={`w-full p-3 rounded-xl border flex items-center justify-center gap-2 transition-all ${isEmergency ? 'bg-rose-600 border-rose-400 text-white animate-pulse' : 'bg-slate-800 border-slate-700 text-rose-400'}`}><AlertOctagon className="w-5 h-5" /><span className="text-xs font-bold">EMERGENCY ALERT</span></button>
+            
+            <button onClick={() => setShowSettings(false)} className="w-full py-3 bg-slate-800 text-white font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
