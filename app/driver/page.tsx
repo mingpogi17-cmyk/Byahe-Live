@@ -35,7 +35,7 @@ export default function DriverDashboard() {
 
   const maxSeatsMap = { Van: 14, Bus: 49, Taxi: 4, Tricycle: 6 };
 
-  // 1. WAITING PINGS (Walang distance filter para siguradong lalabas)
+  //   // 1. WAITING PINGS (Cross-device compatible)
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
     const unsub = onValue(waitingRef, (snapshot) => {
@@ -51,7 +51,10 @@ export default function DriverDashboard() {
           }
         });
 
-        // Audio Notification kapag may BAGONG dumagdag
+        // 🚨 DEBUG LOG (Para makita natin sa Console kung may dumarating)
+        console.log("Driver received waiting commuters:", total);
+
+        // Toast at Audio logic
         if (total > prevWaitingCountRef.current) {
           try { new Audio('/notification.mp3').play().catch(()=>{}); } catch(e) {}
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
@@ -62,6 +65,7 @@ export default function DriverDashboard() {
         setWaitingByShed(counts);
         setWaitingCount(total);
       } else {
+        // 🚨 I-reset ang ref kapag zero para siguradong tutunog ulit sa susunod
         prevWaitingCountRef.current = 0;
         setWaitingByShed({});
         setWaitingCount(0);
