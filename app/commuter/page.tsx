@@ -7,57 +7,14 @@ import { ref, onValue, set, remove } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Ticket, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, CloudRain, Bell, BellRing, Wallet, Siren, Award
+  Share2, Bell, BellRing, Wallet, Siren, Award
 } from "lucide-react";
 
-interface TripData {
-  tripId: string;
-  status: "Available" | "Standing" | "Full";
-  location: { lat: number; lng: number };
-  seatsAvailable?: number;
-  fare?: number;
-  isOutOfService?: boolean;
-  isEmergency?: boolean;
-  updatedAt: number;
-  reports?: { correct: number; wrong: number };
-  isVerified?: boolean;
-}
+// 🚨 IMPORT NATIN YUNG TAMANG SHEDS AT TYPES
+import { SHEDS, Shed, TripData } from "@/lib/constants";
+import { getDistance } from "@/lib/geo";
 
-interface CommunityAlert {
-  id: string;
-  type: string;
-  timestamp: number;
-}
-
-interface Shed {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-}
-
-const SHEDS: Shed[] = [
-  { id: "sta_cruz", name: "Sta. Cruz", lat: 6.8342, lng: 125.4149 },
-  { id: "digos", name: "Digos City", lat: 6.7497, lng: 125.3572 },
-  { id: "panabo", name: "Panabo City", lat: 7.3079, lng: 125.6841 },
-  { id: "tagum", name: "Tagum City", lat: 7.4478, lng: 125.8072 },
-  { id: "carmen", name: "Carmen", lat: 7.2095, lng: 125.7055 },
-  { id: "babak", name: "Babak", lat: 7.1347, lng: 125.6837 },
-  { id: "samal", name: "Island Garden City of Samal", lat: 7.0733, lng: 125.7083 },
-  { id: "mintal", name: "Mintal", lat: 7.0997, lng: 125.5885 },
-  { id: "toril", name: "Toril", lat: 7.0153, lng: 125.4922 },
-  { id: "calinan", name: "Calinan", lat: 7.1861, lng: 125.4552 },
-];
-
-const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-};
-
-export default function HomePage() {
+export default function CommuterPage() {
   const [trips, setTrips] = useState<TripData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
@@ -70,13 +27,11 @@ export default function HomePage() {
   const [showShedDropdown, setShowShedDropdown] = useState(false);
 
   const [showReportModal, setShowReportModal] = useState(false);
-  const [activeAlert, setActiveAlert] = useState<CommunityAlert | null>(null);
+  const [activeAlert, setActiveAlert] = useState<any>(null);
   const [alarms, setAlarms] = useState<{[key: string]: number}>({});
 
   const [points, setPoints] = useState(0);
   const [showSosModal, setShowSosModal] = useState(false);
-
-  // 🚨 ANTI-SPAM STATE
   const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
 
   useEffect(() => {
@@ -142,7 +97,6 @@ export default function HomePage() {
     return () => { unsubTrips(); unsubReports(); unsubAlert(); };
   }, []);
 
-  // 🚨 SAFETY CHECK SA LOCATION (Para hindi mag-crash kapag walang GPS)
   const sortedAndFilteredTrips = useMemo(() => {
     const nearbyTrips = trips.filter(trip => {
       if (trip.isOutOfService || !trip.location || !trip.location.lat) return false; 
@@ -173,11 +127,7 @@ export default function HomePage() {
   };
 
   const handleReport = async (tripId: string, type: "correct" | "wrong") => {
-    // 🚨 ANTI-SPAM CHECK
-    if (reportedTrips[tripId]) {
-      alert("Naka-report ka na para sa sasakyang ito.");
-      return;
-    }
+    if (reportedTrips[tripId]) return;
 
     try {
       const trip = trips.find(t => t.tripId === tripId);
@@ -192,8 +142,6 @@ export default function HomePage() {
       const newPoints = points + 5;
       setPoints(newPoints);
       localStorage.setItem("biyahe_points", newPoints.toString());
-
-      // I-SAVE NA NAKA-REPORT NA PARA MA-DISABLE ANG BUTTONS
       setReportedTrips(prev => ({ ...prev, [tripId]: true }));
     } catch (err) { console.error(err); }
   };
@@ -215,7 +163,7 @@ export default function HomePage() {
       try { await navigator.share({ title: "Biyahe Live", text, url: window.location.href }); } catch (e) {}
     } else {
       await navigator.clipboard.writeText(text);
-      alert("Copied to clipboard! I-paste sa GC/Messenger.");
+      alert("Copied to clipboard!");
     }
   };
 
@@ -227,7 +175,7 @@ export default function HomePage() {
     } else {
       setAlarms(prev => ({ ...prev, [tripId]: Date.now() + 10 * 60 * 1000 }));
       if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-      alert("Alarm set! Mag-a-alert ang phone mo kapag malapit na ang sasakyan (Mock: 10 mins).");
+      alert("Alarm set! Mag-a-alert ang phone mo kapag malapit na.");
     }
   };
 
@@ -240,7 +188,7 @@ export default function HomePage() {
       });
       setShowSosModal(false);
       if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
-      alert("SOS Sent! Na-notify na ang mga driver at authorities sa area.");
+      alert("SOS Sent! Na-notify na ang mga driver.");
     } catch (err) { console.error(err); }
   };
 
@@ -285,7 +233,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main className="w-full max-w-md space-y-4 pt-12">
+      <main className="w-full max-w-md space-y-4 pt-4">
         
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
@@ -306,9 +254,6 @@ export default function HomePage() {
               )}
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 text-[10px] text-blue-400 bg-blue-950/30 px-2 py-1 rounded-md border border-blue-900/50">
-                <CloudRain className="w-3 h-3" /> 28°C
-              </div>
               <button onClick={handleFavoriteShed} className={`p-1.5 rounded-lg transition-colors ${isFavorite ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'}`}>
                 <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
               </button>
@@ -321,6 +266,7 @@ export default function HomePage() {
               {getMinutesAgo(lastRefresh) === 0 ? "Ngayon lang" : `${getMinutesAgo(lastRefresh)} min`}
             </span>
             <div className="flex items-center gap-2">
+              {/* 🚨 DITO YUNG LINK PAPUNTANG TICKET GENERATOR */}
               <Link href="/commuter/ticket" className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 rounded-lg text-xs font-bold hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-1">
                 <Ticket className="w-3 h-3" /> Ticket
               </Link>
@@ -392,7 +338,7 @@ export default function HomePage() {
                       <div className="p-2 bg-emerald-950/60 rounded-xl border border-emerald-800/40 text-emerald-400"><Bus className="w-5 h-5" /></div>
                       <div>
                         <h2 className="font-bold text-base flex items-center gap-1.5">
-                          PUJ / PUV #{trip.tripId.slice(-4).toUpperCase()}
+                          {trip.vehicleType || "PUV"} #{trip.tripId.slice(-4).toUpperCase()}
                           {trip.isVerified && <ShieldCheck className="w-4 h-4 text-blue-400" />}
                         </h2>
                         <span className="text-[11px] text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> {distance.toFixed(1)} km away</span>
