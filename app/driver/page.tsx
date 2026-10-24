@@ -6,7 +6,7 @@ import { database } from "@/lib/firebase";
 import { ref, onValue, set, remove } from "firebase/database";
 import { 
   Navigation, Users, Settings, ShieldCheck, 
-  WifiOff, Siren, ArrowLeft, Play, Square, MapPin
+  WifiOff, Siren, ArrowLeft, Play, Square, MapPin, QrCode
 } from "lucide-react";
 import { useUserId } from "@/lib/useUserId";
 import { useToast } from "@/components/Toast";
@@ -17,7 +17,7 @@ export default function DriverDashboard() {
 
   // STATES
   const [isTripActive, setIsTripActive] = useState(false);
-  const [vehicleType, setVehicleType] = useState<"Van" | "Bus" | "Taxi" | "Tricycle">("Van");
+  const [vehicleType, setVehicleType] = useState<"Van" | "Bus" | "MiniBus" | "Taxi" | "Tricycle" | "Motor">("Van");
   const [isAircon, setIsAircon] = useState(true);
   const [seats, setSeats] = useState(14);
   const [earnings, setEarnings] = useState(0);
@@ -33,9 +33,17 @@ export default function DriverDashboard() {
   const watchIdRef = useRef<number | null>(null);
   const prevWaitingCountRef = useRef(0);
 
-  const maxSeatsMap = { Van: 14, Bus: 49, Taxi: 4, Tricycle: 6 };
+  // 🚨 IDINAGDAG NATIN ANG MINIBUS AT MOTOR
+  const maxSeatsMap = { 
+    Van: 14, 
+    Bus: 49, 
+    MiniBus: 30, 
+    Taxi: 4, 
+    Tricycle: 6, 
+    Motor: 1 
+  };
 
-  //   // 1. WAITING PINGS (Cross-device compatible)
+  // 1. WAITING PINGS (Cross-device compatible)
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
     const unsub = onValue(waitingRef, (snapshot) => {
@@ -51,10 +59,6 @@ export default function DriverDashboard() {
           }
         });
 
-        // 🚨 DEBUG LOG (Para makita natin sa Console kung may dumarating)
-        console.log("Driver received waiting commuters:", total);
-
-        // Toast at Audio logic
         if (total > prevWaitingCountRef.current) {
           try { new Audio('/notification.mp3').play().catch(()=>{}); } catch(e) {}
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
@@ -65,7 +69,6 @@ export default function DriverDashboard() {
         setWaitingByShed(counts);
         setWaitingCount(total);
       } else {
-        // 🚨 I-reset ang ref kapag zero para siguradong tutunog ulit sa susunod
         prevWaitingCountRef.current = 0;
         setWaitingByShed({});
         setWaitingCount(0);
@@ -234,15 +237,16 @@ export default function DriverDashboard() {
           </div>
         )}
 
-        <div className="flex items-center justify-between bg-slate-950 p-1 rounded-xl border border-slate-800">
-          {["Van", "Bus", "Taxi", "Tricycle"].map((v) => (
+        {/* 🚨 PINALAKI NATIN ANG GRID PARA KASYA ANG 6 NA SASAKYAN */}
+        <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+          {["Van", "Bus", "MiniBus", "Taxi", "Tricycle", "Motor"].map((v) => (
             <button 
               key={v} 
               onClick={() => {
                 setVehicleType(v as any);
                 setSeats(maxSeatsMap[v as keyof typeof maxSeatsMap]);
               }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${vehicleType === v ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+              className={`py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all ${vehicleType === v ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
             >
               {v}
             </button>
@@ -272,12 +276,22 @@ export default function DriverDashboard() {
           <button onClick={() => setSeats(seats + 1)} className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl font-black text-slate-300 hover:bg-slate-700">+</button>
         </div>
 
+        {/* 🚨 IDINAGDAG NATIN ANG SCAN QR BUTTON DITO */}
+        <div className="grid grid-cols-2 gap-3 mt-2">
+          <Link href="/scan" className="flex items-center justify-center gap-2 py-3 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-xl font-bold hover:bg-blue-600/30 transition-all text-xs">
+            <QrCode className="w-4 h-4" /> Scan Ticket
+          </Link>
+          <button className="flex items-center justify-center gap-2 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700 transition-all text-xs">
+            <Settings className="w-4 h-4" /> Settings
+          </button>
+        </div>
+
         {!isTripActive ? (
-          <button onClick={handleStartTrip} className="w-full py-5 bg-emerald-500 text-slate-950 font-black text-lg rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition-all flex items-center justify-center gap-2">
+          <button onClick={handleStartTrip} className="w-full py-5 bg-emerald-500 text-slate-950 font-black text-lg rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 mt-4">
             <Play className="w-6 h-6" /> START TRIP
           </button>
         ) : (
-          <button onClick={handleEndTrip} className="w-full py-5 bg-rose-600 text-white font-black text-lg rounded-2xl shadow-[0_0_20px_rgba(225,29,72,0.3)] hover:bg-rose-500 transition-all flex items-center justify-center gap-2">
+          <button onClick={handleEndTrip} className="w-full py-5 bg-rose-600 text-white font-black text-lg rounded-2xl shadow-[0_0_20px_rgba(225,29,72,0.3)] hover:bg-rose-500 transition-all flex items-center justify-center gap-2 mt-4">
             <Square className="w-6 h-6" /> END TRIP
           </button>
         )}
