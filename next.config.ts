@@ -12,4 +12,5 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
 };
 
-export default withPWA(nextConfig);
+// 🚨 Nilagyan natin ng "as any" para ma-bypass ang type error ng next-pwa
+export default withPWA(nextConfig as any);
