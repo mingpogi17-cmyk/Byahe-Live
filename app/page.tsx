@@ -280,11 +280,8 @@ export default function DriverPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={toggleReservedSeats} className={`p-2 rounded-xl border flex items-center justify-center gap-1 transition-all ${isReservedActive ? 'bg-amber-950/50 border-amber-500/50 text-amber-400' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>
+                    <button onClick={toggleReservedSeats} className={`p-2 rounded-xl border flex items-center justify-center gap-1 transition-all ${isReservedActive ? 'bg-amber-950/50 border-amber-500/50 text-amber-400' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>
             <ShieldAlert className="w-4 h-4" /> <span className="text-xs font-bold">Reserved</span> {isReservedActive && <span className="text-[10px]">{formatTime(reservedTimer)}</span>}
-          </button>
-          <button onClick={() => setShowSettings(true)} className="p-2 rounded-xl border bg-slate-900 border-slate-700 text-slate-400 flex items-center justify-center gap-1">
-            <Settings className="w-4 h-4" /> <span className="text-xs font-bold">Settings</span>
           </button>
         </div>
 
