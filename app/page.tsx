@@ -55,21 +55,18 @@ export default function HomePage() {
   const [showSleepAlarm, setShowSleepAlarm] = useState(false);
   const [sleepDestination, setSleepDestination] = useState<string | null>(null);
   const [sleepAlarmActive, setSleepAlarmActive] = useState(false);
+  const [sleepAlarmDistance, setSleepAlarmDistance] = useState<number>(1);
   const [commuterLocation, setCommuterLocation] = useState<{lat: number, lng: number} | null>(null);
 
   useEffect(() => {
     const savedPoints = localStorage.getItem(STORAGE_KEYS.points);
     if (savedPoints) setPoints(parseInt(savedPoints));
-    
     const savedDaily = localStorage.getItem(STORAGE_KEYS.dailyPoints);
     if (savedDaily) setDailyPoints(parseInt(savedDaily));
-    
     const savedReportTime = localStorage.getItem(STORAGE_KEYS.lastReportTime);
     if (savedReportTime) setLastReportTime(parseInt(savedReportTime));
-
     const hasOnboarded = localStorage.getItem(STORAGE_KEYS.onboarded);
     if (!hasOnboarded) setShowOnboarding(true);
-    
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
@@ -145,22 +142,16 @@ export default function HomePage() {
     if (sortedAndFilteredTrips.length > 0) {
       const nearestTrip = sortedAndFilteredTrips[0];
       const distance = getDistance(selectedShed.lat, selectedShed.lng, nearestTrip.location.lat, nearestTrip.location.lng);
-      
-      if (distance > 2.5 && lastMilestone > 0) {
-        setLastMilestone(0);
-      }
-
+      if (distance > 2.5 && lastMilestone > 0) setLastMilestone(0);
       if (distance <= 0.5 && lastMilestone < 3) { 
         if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]); 
         toast("🔔 500m away! Hapit na moabot.", "success"); 
         setLastMilestone(3); 
-      }
-      else if (distance <= 1 && lastMilestone < 2) { 
+      } else if (distance <= 1 && lastMilestone < 2) { 
         if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
         toast("⏳ 1km away! Paghanda na.", "info"); 
         setLastMilestone(2); 
-      }
-      else if (distance <= 2 && lastMilestone < 1) { 
+      } else if (distance <= 2 && lastMilestone < 1) { 
         if (navigator.vibrate) navigator.vibrate([100]); 
         toast("🚐 2km away! Hapit na.", "info"); 
         setLastMilestone(1); 
@@ -173,15 +164,14 @@ export default function HomePage() {
     const nearestTrip = sortedAndFilteredTrips[0];
     const destShed = SHEDS.find(s => s.name === sleepDestination);
     if (!destShed) return;
-    
     const distanceToDest = getDistance(nearestTrip.location.lat, nearestTrip.location.lng, destShed.lat, destShed.lng);
-    if (distanceToDest <= 2) {
+    if (distanceToDest <= sleepAlarmDistance) {
       if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
       toast(`🔔 Gising na! Malapit na ang sasakyan sa ${sleepDestination} (${distanceToDest.toFixed(1)}km away).`, "success");
       setSleepAlarmActive(false);
       setSleepDestination(null);
     }
-  }, [sortedAndFilteredTrips, sleepAlarmActive, sleepDestination, toast]);
+  }, [sortedAndFilteredTrips, sleepAlarmActive, sleepDestination, sleepAlarmDistance, toast]);
 
   const getMinutesAgo = (timestamp: number) => Math.max(0, Math.floor((now - timestamp) / 60000));
   
@@ -190,9 +180,12 @@ export default function HomePage() {
     else { localStorage.setItem(STORAGE_KEYS.favoriteShed, selectedShed.id); setIsFavorite(true); } 
   };
 
+  // 🚨 FALLBACK GPS PARA SA WAITING PING
   const handleManualWaitingPing = () => {
-    if (!commuterLocation) return toast("Hindi ma-detect ang GPS. I-on ang location.", "error");
-    sendWaitingPing(commuterLocation.lat, commuterLocation.lng);
+    const lat = commuterLocation?.lat || selectedShed.lat;
+    const lng = commuterLocation?.lng || selectedShed.lng;
+    
+    sendWaitingPing(lat, lng);
     setIsWaiting(true);
     toast("Na-notify na ang mga driver sa area!", "success");
   };
@@ -212,10 +205,8 @@ export default function HomePage() {
         correct: type === "correct" ? (currentReports.correct + 1) : currentReports.correct, 
         wrong: type === "wrong" ? (currentReports.wrong + 1) : currentReports.wrong 
       };
-      
       await set(ref(database, `reports/${tripId}`), updates);
       if (navigator.vibrate) navigator.vibrate(50);
-      
       const newPoints = points + 5; 
       setPoints(newPoints); 
       localStorage.setItem(STORAGE_KEYS.points, newPoints.toString()); 
@@ -234,15 +225,12 @@ export default function HomePage() {
       const newPoints = points + 5; 
       const newDailyPoints = dailyPoints + 5;
       const newTime = Date.now();
-      
       setPoints(newPoints); 
       setDailyPoints(newDailyPoints);
       setLastReportTime(newTime);
-      
       localStorage.setItem(STORAGE_KEYS.points, newPoints.toString()); 
       localStorage.setItem(STORAGE_KEYS.dailyPoints, newDailyPoints.toString()); 
       localStorage.setItem(STORAGE_KEYS.lastReportTime, newTime.toString());
-      
       await sendCommunityReport(type);
       setShowReportModal(false); 
       if (navigator.vibrate) navigator.vibrate(50); 
@@ -264,8 +252,7 @@ export default function HomePage() {
     if (alarms[tripId]) { 
       const newAlarms = { ...alarms }; delete newAlarms[tripId]; setAlarms(newAlarms); 
       toast("Alarm cancelled.", "info");
-    }
-    else { 
+    } else { 
       setAlarms(prev => ({ ...prev, [tripId]: Date.now() + COOLDOWNS.alarmDefaultMs })); 
       if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
       toast("Alarm set! (10 mins)", "success"); 
@@ -410,13 +397,10 @@ export default function HomePage() {
               const distance = getDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
               const trustScore = trip.reports ? trip.reports.correct - trip.reports.wrong : 0; const isLowTrust = trustScore < -2;
               const hasAlarm = alarms[trip.tripId];
-              
               const estimatedFare = computeFare(distance, trip.vehicleType || "Van", trip.isAircon || false, isDiscounted);
               const fareDisplay = `₱${estimatedFare.toFixed(0)}`;
-              
               const etaMins = estimateEtaMinutes(distance, trip.speed);
               const etaDisplay = formatEta(etaMins);
-              
               const isReported = reportedTrips[trip.tripId];
               const VehicleIcon = trip.vehicleType === "Bus" ? Bus : trip.vehicleType === "Taxi" ? Car : trip.vehicleType === "Tricycle" ? Car : trip.vehicleType === "Motor" ? Car : Bus;
 
@@ -477,7 +461,6 @@ export default function HomePage() {
       </main>
 
       <footer className="text-center text-xs text-slate-500 my-8 pb-16 flex flex-col items-center gap-4">
-        {/* BUY ME A COFFEE BUTTON */}
         <a 
           href="https://ko-fi.com/yourusername" 
           target="_blank" 
@@ -486,12 +469,10 @@ export default function HomePage() {
         >
           <Coffee className="w-4 h-4" /> Support Biyahe Live
         </a>
-
         <p>Biyahe Live © 2026 · Developed by Ray Mar Olandria</p>
         <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline transition-colors">Privacy Policy & Terms of Service</Link>
       </footer>
 
-      {/* 🚨 SLEEP ALARM MODAL */}
       {showSleepAlarm && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -499,7 +480,22 @@ export default function HomePage() {
               <h2 className="text-lg font-bold text-white flex items-center gap-2"><Bed className="w-5 h-5 text-indigo-400" /> Pahinga Mode</h2>
               <button onClick={() => setShowSleepAlarm(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-xs text-slate-400 mb-4">Piliin ang iyong babaan. Mag-a-alert ang app kapag malapit na ang sasakyan (2km away).</p>
+            <p className="text-xs text-slate-400 mb-4">Piliin ang iyong babaan. Mag-a-alert ang app kapag malapit na ang sasakyan.</p>
+            
+            <div className="flex items-center gap-2 mb-4 bg-slate-950 p-1 rounded-lg border border-slate-800">
+              {[2, 1, 0.5].map((dist) => (
+                <button
+                  key={dist}
+                  onClick={() => setSleepAlarmDistance(dist)}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                    sleepAlarmDistance === dist ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {dist} km
+                </button>
+              ))}
+            </div>
+
             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
               {SHEDS.map(shed => (
                 <button key={shed.id} onClick={() => { setSleepDestination(shed.name); setSleepAlarmActive(true); setShowSleepAlarm(false); if (navigator.vibrate) navigator.vibrate([100, 50, 100]); }} className={`w-full p-3 rounded-xl border text-left font-semibold text-sm transition-all flex items-center justify-between ${sleepDestination === shed.name ? 'bg-indigo-950/50 border-indigo-500 text-indigo-300' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
@@ -517,7 +513,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* 🚨 REPORT MODAL */}
       {showReportModal && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -542,7 +537,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* 🚨 SOS MODAL */}
       {showSosModal && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -574,7 +568,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* 🚨 FARE MATRIX MODAL */}
       {showFareMatrix && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -608,7 +601,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ONBOARDING MODAL */}
       {showOnboarding && (
         <div className="fixed inset-0 z-[200] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-in zoom-in duration-300 text-center flex flex-col items-center">

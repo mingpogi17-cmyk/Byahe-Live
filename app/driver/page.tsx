@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { useUserId } from "@/lib/useUserId";
 import { useToast } from "@/components/Toast";
-import { getDistance } from "@/lib/geo";
 
 export default function DriverDashboard() {
   const userId = useUserId();
@@ -30,29 +29,13 @@ export default function DriverDashboard() {
   const [showStopAlert, setShowStopAlert] = useState(false);
   const [showSosAlert, setShowSosAlert] = useState(false);
   
-  // GPS Refs & States
+  // GPS Ref
   const watchIdRef = useRef<number | null>(null);
-  const driverLocRef = useRef<{lat: number, lng: number} | null>(null);
   const prevWaitingCountRef = useRef(0);
 
-  // Dynamic Seats logic
   const maxSeatsMap = { Van: 14, Bus: 49, Taxi: 4, Tricycle: 6 };
 
-  // 1. GLOBAL GPS TRACKER (Para hindi mag-fail ang alerts kahit walang Start Trip)
-  useEffect(() => {
-    if (navigator.geolocation) {
-      const id = navigator.geolocation.watchPosition(
-        (pos) => {
-          driverLocRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        },
-        (err) => console.log("GPS Error (Alerts will still work):", err),
-        { enableHighAccuracy: true }
-      );
-      return () => navigator.geolocation.clearWatch(id);
-    }
-  }, []);
-
-  // 2. WAITING PER SHED (May Audio at Toast na)
+  // 1. WAITING PINGS (Walang distance filter para siguradong lalabas)
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
     const unsub = onValue(waitingRef, (snapshot) => {
@@ -63,30 +46,18 @@ export default function DriverDashboard() {
 
         Object.values(data).forEach((val: any) => {
           if (!val.expiresAt || Date.now() < val.expiresAt) {
-            // Kung walang GPS ang driver, count lang natin lahat. Kung meron, i-filter sa 15km.
-            if (!driverLocRef.current) {
-              counts[val.shed] = (counts[val.shed] || 0) + 1;
-              total++;
-            } else {
-              const dist = getDistance(driverLocRef.current.lat, driverLocRef.current.lng, val.lat || 6.7497, val.lng || 125.3572);
-              if (dist <= 15) {
-                counts[val.shed] = (counts[val.shed] || 0) + 1;
-                total++;
-              }
-            }
+            counts[val.shed] = (counts[val.shed] || 0) + 1;
+            total++;
           }
         });
 
-        // 🚨 NOTIFICATION LOGIC KUNG MAY BAGONG NAGHIHINTAY
+        // Audio Notification kapag may BAGONG dumagdag
         if (total > prevWaitingCountRef.current) {
-          try {
-            const audio = new Audio('/notification.mp3'); 
-            audio.play().catch(e => console.log("Audio blocked:", e));
-          } catch(e) {}
+          try { new Audio('/notification.mp3').play().catch(()=>{}); } catch(e) {}
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-          toast("May bagong commuter na naghihintay sa shed!", "info");
+          toast("May bagong commuter na naghihintay!", "info");
         }
-        
+
         prevWaitingCountRef.current = total;
         setWaitingByShed(counts);
         setWaitingCount(total);
@@ -99,25 +70,18 @@ export default function DriverDashboard() {
     return () => unsub();
   }, [toast]);
 
-  // 3. STOP REQUEST & AUDIO ALERT
+  // 2. STOP REQUEST (Bababa Ako)
   useEffect(() => {
     const stopRef = ref(database, "stop_request");
     const unsub = onValue(stopRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const hasRecentRequest = Object.values(data).some((req: any) => {
-          if (Date.now() - req.timestamp > 60000) return false;
-          // Kung walang GPS, tutunog pa rin
-          if (!driverLocRef.current) return true;
-          const dist = getDistance(driverLocRef.current.lat, driverLocRef.current.lng, req.lat || 6.7497, req.lng || 125.3572);
-          return dist <= 15;
-        });
+        const hasRecentRequest = Object.values(data).some((req: any) => 
+          Date.now() - req.timestamp < 60000 
+        );
 
         if (hasRecentRequest) {
-          try {
-            const audio = new Audio('/notification.mp3'); 
-            audio.play().catch(e => console.log("Audio blocked:", e));
-          } catch(e) {}
+          try { new Audio('/notification.mp3').play().catch(()=>{}); } catch(e) {}
           if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
           setShowStopAlert(true);
           setTimeout(() => setShowStopAlert(false), 5000);
@@ -127,7 +91,7 @@ export default function DriverDashboard() {
     return () => unsub();
   }, []);
 
-  // 4. SOS ALERT LISTENER
+  // 3. SOS ALERT
   useEffect(() => {
     const sosRef = ref(database, "sos_alert");
     const unsub = onValue(sosRef, (snapshot) => {
@@ -139,17 +103,14 @@ export default function DriverDashboard() {
         if (hasRecentSos) {
           setShowSosAlert(true);
           if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
-          try {
-            const audio = new Audio('/siren.mp3');
-            audio.play().catch(e => console.log(e));
-          } catch(e) {}
+          try { new Audio('/siren.mp3').play().catch(()=>{}); } catch(e) {}
         }
       }
     });
     return () => unsub();
   }, []);
 
-  // 5. LIVE GPS TRACKING PARA SA LIVE_TRIPS
+  // 4. LIVE GPS TRACKING PARA SA LIVE_TRIPS
   useEffect(() => {
     if (isTripActive && userId) {
       if (navigator.geolocation) {
@@ -178,15 +139,11 @@ export default function DriverDashboard() {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-      if (userId) {
-        remove(ref(database, `live_trips/${userId}`));
-      }
+      if (userId) remove(ref(database, `live_trips/${userId}`));
     }
 
     return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
     };
   }, [isTripActive, userId, vehicleType, isAircon, seats, fare]);
 
@@ -204,7 +161,6 @@ export default function DriverDashboard() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 flex flex-col items-center relative">
       
-      {/* 🚨 SOS ALERT BANNER */}
       {showSosAlert && (
         <div className="fixed inset-0 z-[999] bg-rose-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in zoom-in">
           <Siren className="w-24 h-24 text-rose-500 animate-pulse mb-4" />
@@ -214,7 +170,6 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      {/* 🚨 STOP REQUEST POPUP */}
       {showStopAlert && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[999] w-11/12 max-w-sm bg-amber-600 text-white p-4 rounded-xl shadow-2xl flex items-center justify-between animate-in slide-in-from-top-4">
           <div className="flex items-center gap-3">
@@ -228,7 +183,6 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      {/* HEADER */}
       <header className="w-full max-w-md flex items-center justify-between mt-4 mb-6">
         <div className="flex items-center gap-2">
           <Link href="/" className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition">
@@ -238,7 +192,6 @@ export default function DriverDashboard() {
           <h1 className="text-lg font-black tracking-widest">BIYAHE LIVE</h1>
         </div>
         
-        {/* 🔴 LIVE PULSE INDICATOR */}
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
           waitingCount > 0 ? 'bg-emerald-950/40 border-emerald-500/50' : 'bg-slate-900 border-slate-700 opacity-60'
         }`}>
@@ -258,10 +211,8 @@ export default function DriverDashboard() {
         </div>
       </header>
 
-      {/* MAIN DASHBOARD CARD */}
       <main className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
         
-        {/* 🚨 WAITING PER SHED INDICATOR */}
         {Object.keys(waitingByShed).length > 0 && (
           <div className="bg-emerald-950/30 border border-emerald-800/50 p-3 rounded-2xl mb-2 animate-in fade-in">
             <p className="text-[10px] text-emerald-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-1">
@@ -279,7 +230,6 @@ export default function DriverDashboard() {
           </div>
         )}
 
-        {/* VEHICLE SELECTOR */}
         <div className="flex items-center justify-between bg-slate-950 p-1 rounded-xl border border-slate-800">
           {["Van", "Bus", "Taxi", "Tricycle"].map((v) => (
             <button 
@@ -295,7 +245,6 @@ export default function DriverDashboard() {
           ))}
         </div>
 
-        {/* STATS */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
             <p className="text-[10px] text-slate-500 font-bold tracking-wider">KITA</p>
@@ -310,7 +259,6 @@ export default function DriverDashboard() {
           </div>
         </div>
 
-        {/* SEAT COUNTER */}
         <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
           <button onClick={() => setSeats(Math.max(0, seats - 1))} className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl font-black text-slate-300 hover:bg-slate-700">-</button>
           <div className="text-center">
@@ -320,7 +268,6 @@ export default function DriverDashboard() {
           <button onClick={() => setSeats(seats + 1)} className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl font-black text-slate-300 hover:bg-slate-700">+</button>
         </div>
 
-        {/* ACTION BUTTONS */}
         {!isTripActive ? (
           <button onClick={handleStartTrip} className="w-full py-5 bg-emerald-500 text-slate-950 font-black text-lg rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition-all flex items-center justify-center gap-2">
             <Play className="w-6 h-6" /> START TRIP
