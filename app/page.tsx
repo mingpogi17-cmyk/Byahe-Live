@@ -35,6 +35,8 @@ export default function HomePage() {
   const [alarms, setAlarms] = useState<{[key: string]: number}>({});
   const [points, setPoints] = useState(0);
   const [showSosModal, setShowSosModal] = useState(false);
+  const [showGcashModal, setShowGcashModal] = useState(false); // 🚨 GCASH MODAL STATE
+  
   const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
   const [isWaiting, setIsWaiting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -81,6 +83,7 @@ export default function HomePage() {
     }
   }, []);
 
+  // 🚨 AUTO-CANCEL LOGIC (Kapag lumayo sa 50m radius)
   useEffect(() => {
     if (!commuterLocation) return;
     const distanceToShed = getDistance(commuterLocation.lat, commuterLocation.lng, selectedShed.lat, selectedShed.lng);
@@ -180,25 +183,28 @@ export default function HomePage() {
     else { localStorage.setItem(STORAGE_KEYS.favoriteShed, selectedShed.id); setIsFavorite(true); } 
   };
 
-  // 🚨 FALLBACK GPS PARA SA WAITING PING
-    const handleManualWaitingPing = () => {
+  // 🚨 UPDATED: May Proximity Check (50m) at Toggle (Cancel)
+  const handleManualWaitingPing = () => {
+    if (isWaiting) {
+      cancelWaitingPing();
+      setIsWaiting(false);
+      toast("Kinansela ang paghihintay.", "info");
+      return;
+    }
+
     if (!commuterLocation) {
-      // Fallback kung walang GPS
       sendWaitingPing(selectedShed.lat, selectedShed.lng);
       setIsWaiting(true);
       toast("Na-notify na ang mga driver!", "success");
       return;
     }
 
-    // Check kung malapit ba talaga siya sa shed (50m radius)
     const distanceToShed = getDistance(commuterLocation.lat, commuterLocation.lng, selectedShed.lat, selectedShed.lng);
-    
     if (distanceToShed > 0.05) {
       toast(`Masyado kang malayo sa ${selectedShed.name} (${(distanceToShed).toFixed(1)} km away). Lumapit ka muna sa shed.`, "error");
       return;
     }
 
-    // Kapag malapit, saka lang mag-se-send
     sendWaitingPing(commuterLocation.lat, commuterLocation.lng);
     setIsWaiting(true);
     toast("Na-notify na ang mga driver sa area!", "success");
@@ -322,8 +328,13 @@ export default function HomePage() {
       <main className="w-full max-w-md space-y-4 pt-4">
         
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={handleManualWaitingPing} disabled={isWaiting} className={`py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 transition-all ${isWaiting ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/50 cursor-not-allowed' : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'}`}>
-            <BellRing className="w-6 h-6" /> {isWaiting ? "Waiting..." : "Naghihintay Ako"}
+          <button onClick={handleManualWaitingPing} className={`py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 transition-all ${
+            isWaiting 
+              ? 'bg-amber-500/20 text-amber-400 border border-amber-800/50 hover:bg-amber-500/30' 
+              : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'
+          }`}>
+            <BellRing className={`w-6 h-6 ${isWaiting ? 'animate-pulse' : ''}`} /> 
+            {isWaiting ? "Kinansela" : "Naghihintay Ako"}
           </button>
           <button onClick={handleRequestStop} className="py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg">
             <Bell className="w-6 h-6" /> Bababa Ako
@@ -475,17 +486,47 @@ export default function HomePage() {
       </main>
 
       <footer className="text-center text-xs text-slate-500 my-8 pb-16 flex flex-col items-center gap-4">
-        <a 
-          href="https://ko-fi.com/yourusername" 
-          target="_blank" 
-          rel="noopener noreferrer"
+        {/* 🚨 GCASH SUPPORT BUTTON */}
+        <button 
+          onClick={() => setShowGcashModal(true)}
           className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-4 py-2 rounded-full font-bold hover:bg-amber-500/20 transition-all"
         >
           <Coffee className="w-4 h-4" /> Support Biyahe Live
-        </a>
+        </button>
         <p>Biyahe Live © 2026 · Developed by Ray Mar Olandria</p>
         <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline transition-colors">Privacy Policy & Terms of Service</Link>
       </footer>
+
+      {/* ☕ GCASH SUPPORT MODAL */}
+      {showGcashModal && (
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200 text-center">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Coffee className="w-5 h-5 text-amber-400" /> Support Biyahe Live
+              </h2>
+              <button onClick={() => setShowGcashModal(false)} className="p-1 text-slate-400 hover:text-white transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <p className="text-xs text-slate-400 mb-4">
+              Salamat sa pagsuporta! I-scan ang QR code na ito gamit ang GCash o kahit anong InstaPay app.
+            </p>
+
+            <div className="bg-white p-4 rounded-2xl mb-4 inline-block shadow-lg">
+              <img src="/gcash-qr.png" alt="GCash QR Code" className="w-48 h-48 object-contain" />
+            </div>
+
+            <p className="text-sm font-bold text-white mb-2">R** M** O.</p>
+            <p className="text-xs text-slate-500">Transfer fees may apply.</p>
+
+            <button onClick={() => setShowGcashModal(false)} className="w-full mt-6 py-3 bg-slate-800 text-white font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {showSleepAlarm && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
