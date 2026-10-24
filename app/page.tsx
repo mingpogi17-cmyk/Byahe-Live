@@ -636,14 +636,15 @@ export default function HomePage() {
               </p>
             </div>
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              {Object.entries({
-                "Provincial Bus": "₱12 + ₱2.20/km",
-                "City Bus (Aircon)": "₱18 + ₱2.97/km",
+               {Object.entries({
+                "Bus (Ordinary / Provincial)": "₱12 + ₱2.20/km",
+                "Bus (Aircon / City)": "₱18 + ₱2.97/km",
                 "UV Express (Van)": "₱2.60/km",
                 "Traditional Jeepney": "₱14 + ₱2.00/km",
                 "Modern Jeepney": "₱17 + ₱2.40/km",
                 "Taxi (Metered)": "₱45-₱50 flagdown",
-                "Motor/Tricycle": "₱10 + ₱1.50/km"
+                "Tricycle": "₱15 + ₱3.00/km",
+                "Motor (Habal-habal)": "₱10 + ₱1.50/km"
               }).map(([name, price]) => (
                 <div key={name} className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
                   <span className="text-sm text-slate-300">{name}</span>
