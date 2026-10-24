@@ -15,6 +15,7 @@ export default function DriverPage() {
   const [tripId, setTripId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
+  // VEHICLE DETAILS
   const [vehicleType, setVehicleType] = useState<"Van" | "Bus" | "Taxi" | "Tricycle" | "Motor">("Van");
   const [plateNumber, setPlateNumber] = useState("");
   const [isAircon, setIsAircon] = useState(true);
@@ -30,6 +31,7 @@ export default function DriverPage() {
   const [isGcashEnabled, setIsGcashEnabled] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
+  // ALERTS
   const [sosAlert, setSosAlert] = useState<any>(null);
   const [isSosAcknowledged, setIsSosAcknowledged] = useState(false);
   const [paymentNotif, setPaymentNotif] = useState<any>(null);
@@ -59,10 +61,53 @@ export default function DriverPage() {
     }
   };
 
-  const playSiren = () => { /* ... same ... */ };
-  const playDing = () => { /* ... same ... */ };
-  const startAlarm = () => { /* ... same ... */ };
-  const stopAlarm = () => { /* ... same ... */ };
+  const playSiren = () => {
+    if (!audioCtxRef.current) return;
+    const ctx = audioCtxRef.current;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.5);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+  };
+
+  const playDing = () => {
+    if (!audioCtxRef.current) return;
+    const ctx = audioCtxRef.current;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  };
+
+  const startAlarm = () => {
+    if (alarmIntervalRef.current) return;
+    playSiren();
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100]);
+    alarmIntervalRef.current = setInterval(() => {
+      playSiren();
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100]);
+    }, 1200);
+  };
+
+  const stopAlarm = () => {
+    if (alarmIntervalRef.current) {
+      clearInterval(alarmIntervalRef.current);
+      alarmIntervalRef.current = null;
+    }
+    if (navigator.vibrate) navigator.vibrate(0);
+  };
 
   useEffect(() => {
     const storedTripId = localStorage.getItem("biyahe_trip_id");
@@ -138,8 +183,24 @@ export default function DriverPage() {
     setSeatsAvailable(capacity);
   };
 
-  const handleGcashUpload = (e: React.ChangeEvent<HTMLInputElement>) => { /* ... same ... */ };
-  const removeGcashQr = () => { /* ... same ... */ };
+  const handleGcashUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      setGcashQr(base64String);
+      localStorage.setItem("biyahe_gcash_qr", base64String);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeGcashQr = () => {
+    setGcashQr(null);
+    localStorage.removeItem("biyahe_gcash_qr");
+    setIsGcashEnabled(false);
+    localStorage.removeItem("biyahe_gcash_enabled");
+  };
 
   const pushLocationToFirebase = async (position: GeolocationPosition, currentStatus: string, currentSeats: number, currentReserved: number) => {
     if (!tripId) return;
@@ -182,9 +243,29 @@ export default function DriverPage() {
     }, 10000);
   };
 
-  const handleEndTrip = async () => { /* ... same ... */ };
+  const handleEndTrip = async () => {
+    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+    if (intervalIdRef.current !== null) clearInterval(intervalIdRef.current);
+    if (timerRef.current !== null) clearInterval(timerRef.current);
+    if (tripId) {
+      try { await ensureAuth(); await remove(ref(database, `live_trips/${tripId}`)); } catch (err) { console.error(err); }
+    }
+    setIsLive(false); setIsReservedActive(false); setIsOutOfService(false); setIsEmergency(false);
+    localStorage.removeItem("biyahe_is_live"); localStorage.removeItem("biyahe_seats");
+  };
 
-  const updateSeats = async (delta: number) => { /* ... same ... */ };
+  const updateSeats = async (delta: number) => {
+    const newSeats = Math.max(0, Math.min(seatsTotal, seatsAvailable + delta));
+    setSeatsAvailable(newSeats);
+    if (delta === -1) setEarnings(prev => prev + fare);
+    let newStatus: "Available" | "Standing" | "Full" = "Available";
+    if (newSeats === 0) newStatus = "Full";
+    else if (newSeats <= 3) newStatus = "Standing";
+    setStatus(newStatus);
+    if (isLive && tripId) {
+      try { await ensureAuth(); await update(ref(database, `live_trips/${tripId}`), { seatsAvailable: newSeats, status: newStatus }); } catch (err) { console.error(err); }
+    }
+  };
 
   const handleAddWalkIn = async () => {
     if (reservedSeatsLeft <= 0) {
@@ -211,14 +292,38 @@ export default function DriverPage() {
     alert(`Walk-in passenger added. Reserved seats left: ${reservedSeatsLeft - 1}`);
   };
 
-  const toggleReservedSeats = () => { /* ... same ... */ };
-  const toggleEmergency = async () => { /* ... same ... */ };
+  const toggleReservedSeats = () => {
+    if (isReservedActive) {
+      setIsReservedActive(false);
+      if (timerRef.current !== null) clearInterval(timerRef.current);
+      setReservedTimer(0);
+    } else {
+      setIsReservedActive(true); setReservedTimer(180);
+      timerRef.current = setInterval(() => {
+        setReservedTimer(prev => {
+          if (prev <= 1) { if (timerRef.current !== null) clearInterval(timerRef.current); setIsReservedActive(false); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+  };
+
+  const toggleEmergency = async () => {
+    const newState = !isEmergency; setIsEmergency(newState);
+    if (newState) { try { await set(ref(database, "community_alert"), { id: "alert_" + Date.now(), type: "Emergency", timestamp: Date.now() }); } catch (err) {} }
+    else { try { await remove(ref(database, "community_alert")); } catch (err) {} }
+  };
+
   const handleAcknowledge = () => { setIsSosAcknowledged(true); stopAlarm(); };
-  const dismissSOS = async () => { /* ... same ... */ };
-  const handlePaymentConfirm = async () => { /* ... same ... */ };
-  const dismissWaiting = async () => { /* ... same ... */ };
-  const dismissStop = async () => { /* ... same ... */ };
-  const formatTime = (seconds: number) => { /* ... same ... */ };
+  const dismissSOS = async () => { try { await remove(ref(database, "sos_alert")); } catch (err) { console.error(err); } };
+  const handlePaymentConfirm = async () => { try { await remove(ref(database, "payment_requests")); setPaymentNotif(null); } catch (err) { console.error(err); } };
+  const dismissWaiting = async () => { try { await remove(ref(database, "waiting_commuters")); setWaitingAlert(null); } catch (err) { console.error(err); } };
+  const dismissStop = async () => { try { await remove(ref(database, "stop_request")); setStopAlert(null); } catch (err) { console.error(err); } };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60); const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   return (
     <div 
@@ -226,16 +331,47 @@ export default function DriverPage() {
       className={`min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center relative p-4 ${isEmergency ? 'bg-rose-950' : ''}`}
     >
       
-      {/* ALERTS STACK */}
+      {/* 🚨 ALERTS STACK */}
       <div className="fixed top-0 left-0 w-full z-[100] flex flex-col gap-2 p-2 max-w-md mx-auto">
-        {/* ... SOS, Payment, Waiting, Stop Alerts same ... */}
+        {sosAlert && (
+          <div className={`p-4 rounded-xl flex flex-col gap-3 shadow-2xl transition-all ${isSosAcknowledged ? 'bg-rose-950 border-b border-rose-600' : 'bg-rose-600 animate-pulse'}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 text-white"><Siren className={`w-8 h-8 ${!isSosAcknowledged && 'animate-bounce'}`} /><div><p className="font-black text-lg">SOS ALERT!</p><p className="text-xs font-semibold">Location: {sosAlert.shed}</p></div></div>
+              <button onClick={dismissSOS} className="p-2 bg-black/20 rounded-full text-white hover:bg-black/40 transition"><X className="w-6 h-6" /></button>
+            </div>
+            {!isSosAcknowledged && (<div className="flex gap-2"><button onClick={handleAcknowledge} className="flex-1 py-2 bg-white text-rose-700 font-bold text-sm rounded-lg flex items-center justify-center gap-1"><Check className="w-4 h-4" /> TUGON</button><a href="tel:911" className="flex-1 py-2 bg-slate-950 text-white font-bold text-sm rounded-lg text-center">CALL 911</a></div>)}
+          </div>
+        )}
+
+        {paymentNotif && (
+          <div className="p-3 rounded-xl bg-blue-950/90 border border-blue-500/50 shadow-lg flex items-center justify-between">
+            <div className="flex items-center gap-3"><Wallet className="w-6 h-6 text-blue-400" /><div><p className="font-bold text-white text-sm">May nagbayad via GCash!</p><p className="text-xs text-blue-300">I-verify sa app.</p></div></div>
+            <button onClick={handlePaymentConfirm} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold">Confirm</button>
+          </div>
+        )}
+
+        {waitingAlert && (
+          <div className="p-3 rounded-xl bg-emerald-950/90 border border-emerald-500/50 shadow-lg flex items-center justify-between">
+            <div className="flex items-center gap-3"><Bell className="w-6 h-6 text-emerald-400 animate-bounce" /><div><p className="font-bold text-white text-sm">May naghihintay sa {waitingAlert.shed}!</p><p className="text-xs text-emerald-300">Pumunta na doon.</p></div></div>
+            <button onClick={dismissWaiting} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold">Okay</button>
+          </div>
+        )}
+
+        {stopAlert && (
+          <div className="p-3 rounded-xl bg-amber-950/90 border border-amber-500/50 shadow-lg flex items-center justify-between">
+            <div className="flex items-center gap-3"><UserMinus className="w-6 h-6 text-amber-400 animate-pulse" /><div><p className="font-bold text-white text-sm">May pasaherong bababa!</p><p className="text-xs text-amber-300">Sa {stopAlert.shed}.</p></div></div>
+            <button onClick={dismissStop} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold">Okay</button>
+          </div>
+        )}
       </div>
 
+      {/* 🚨 FLOATING BUTTONS */}
       <div className="fixed bottom-24 right-6 z-50 flex flex-col gap-3">
         <a href="https://waze.com/ul" target="_blank" rel="noopener noreferrer" className="p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl transition-all flex items-center justify-center"><Map className="w-6 h-6" /></a>
         {isLive && !isTerminalMode && (<Link href="/driver/scan" className="p-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full shadow-2xl transition-all flex items-center gap-2"><QrCode className="w-6 h-6" /><span className="font-bold pr-2">Scan</span></Link>)}
       </div>
 
+      {/* 🚨 HEADER */}
       <div className="w-full max-w-md flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold flex items-center gap-2"><Navigation className="w-6 h-6 text-emerald-400" /> BIYAHE LIVE</h1>
         <div className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 ${isLive ? (isOutOfService ? 'bg-slate-700 text-slate-300' : 'bg-emerald-500 text-slate-950') : 'bg-slate-800 text-slate-400'}`}>
@@ -244,8 +380,10 @@ export default function DriverPage() {
         </div>
       </div>
 
+      {/* 🚨 MAIN CARD */}
       <div className="w-full max-w-md bg-slate-800 rounded-2xl p-5 shadow-xl border border-slate-700 space-y-4">
         
+        {/* VEHICLE DETAILS */}
         <div className="flex items-center justify-between bg-slate-900 p-3 rounded-xl border border-slate-700">
           <div className="flex items-center gap-2">
             {(["Van", "Bus", "Taxi", "Tricycle", "Motor"] as const).map(type => (
@@ -255,12 +393,12 @@ export default function DriverPage() {
           <button onClick={() => setIsAircon(!isAircon)} className={`text-[10px] font-bold px-2 py-1 rounded ${isAircon ? 'bg-blue-950 text-blue-400' : 'bg-slate-800 text-slate-400'}`}>{isAircon ? "❄️ Aircon" : "🌬️ Non"}</button>
         </div>
 
+        {/* EARNINGS & FARE */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex flex-col items-center justify-center">
             <p className="text-[10px] text-slate-400">KITA</p>
             <p className="text-lg font-black text-white">₱{earnings}</p>
           </div>
-          
           <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex flex-col items-center justify-center">
             <p className="text-[10px] text-slate-400 mb-1">PAMASAHE</p>
             <div className="flex items-center gap-1">
@@ -270,6 +408,7 @@ export default function DriverPage() {
           </div>
         </div>
         
+        {/* SEAT COUNTER */}
         <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
           <p className="text-[10px] text-slate-400 text-center mb-2">AVAILABLE SEATS ({seatsTotal} Total)</p>
           <div className="flex items-center justify-between">
@@ -279,8 +418,9 @@ export default function DriverPage() {
           </div>
         </div>
 
-                            <div className="grid grid-cols-2 gap-2">
-                    <button onClick={toggleReservedSeats} className={`p-2 rounded-xl border flex items-center justify-center gap-1 transition-all ${isReservedActive ? 'bg-amber-950/50 border-amber-500/50 text-amber-400' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>
+        {/* RESERVED & SETTINGS ROW */}
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={toggleReservedSeats} className={`p-2 rounded-xl border flex items-center justify-center gap-1 transition-all ${isReservedActive ? 'bg-amber-950/50 border-amber-500/50 text-amber-400' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>
             <ShieldAlert className="w-4 h-4" /> <span className="text-xs font-bold">Reserved</span> {isReservedActive && <span className="text-[10px]">{formatTime(reservedTimer)}</span>}
           </button>
           <button onClick={() => setShowSettings(true)} className="p-2 rounded-xl border bg-slate-900 border-slate-700 text-slate-400 flex items-center justify-center gap-1">
@@ -288,6 +428,7 @@ export default function DriverPage() {
           </button>
         </div>
 
+        {/* WALK-IN BUTTON */}
         <button 
           onClick={handleAddWalkIn} 
           disabled={reservedSeatsLeft <= 0}
@@ -300,6 +441,7 @@ export default function DriverPage() {
           <Users className="w-4 h-4" /> Add Walk-in (Reserved: {reservedSeatsLeft})
         </button>
 
+        {/* START/END TRIP BUTTON */}
         <div className="pt-2">
           {!isLive ? (
             <button onClick={handleStartTrip} className="w-full py-4 bg-emerald-500 text-slate-950 font-black text-lg rounded-2xl hover:bg-emerald-400 transition-all">START TRIP</button>
