@@ -2,31 +2,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { STORAGE_KEYS } from "./constants";
-
-// Gumagawa ng unique ID para sa bawat user (walang kailangang login)
-const generateId = (): string => {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return "u-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
-};
+import { auth, ensureAuth } from "./firebase"; 
+import { onAuthStateChanged } from "firebase/auth";
 
 export const useUserId = (): string | null => {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      let id = localStorage.getItem(STORAGE_KEYS.userId);
-      if (!id) {
-        id = generateId();
-        localStorage.setItem(STORAGE_KEYS.userId, id);
+    // 1. I-setup ang listener para sa Auth State
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid); // Kapag naka-login (Anonymous), kunin ang UID
+      } else {
+        // 2. Kung wala pang user, i-trigger ang Anonymous Login
+        ensureAuth()
+          .then((userCredential: any) => {
+            setUserId(userCredential.uid);
+          })
+          .catch((err) => {
+            console.error("Auth failed:", err);
+            // Fallback kung sakaling mag-fail ang Firebase Auth
+            let fallbackId = localStorage.getItem("biyahe_fallback_id");
+            if (!fallbackId) {
+              fallbackId = "u-" + Math.random().toString(36).substring(2, 10);
+              localStorage.setItem("biyahe_fallback_id", fallbackId);
+            }
+            setUserId(fallbackId);
+          });
       }
-      setUserId(id);
-    } catch {
-      // Fallback kung naka-private mode ang browser (blocked ang localStorage)
-      setUserId(generateId());
-    }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   return userId;

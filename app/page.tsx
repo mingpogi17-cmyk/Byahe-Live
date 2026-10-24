@@ -35,7 +35,7 @@ export default function HomePage() {
   const [alarms, setAlarms] = useState<{[key: string]: number}>({});
   const [points, setPoints] = useState(0);
   const [showSosModal, setShowSosModal] = useState(false);
-  const [showGcashModal, setShowGcashModal] = useState(false); // 🚨 GCASH MODAL STATE
+  const [showGcashModal, setShowGcashModal] = useState(false);
   
   const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
   const [isWaiting, setIsWaiting] = useState(false);
@@ -83,7 +83,6 @@ export default function HomePage() {
     }
   }, []);
 
-  // 🚨 AUTO-CANCEL LOGIC (Kapag lumayo sa 50m radius)
   useEffect(() => {
     if (!commuterLocation) return;
     const distanceToShed = getDistance(commuterLocation.lat, commuterLocation.lng, selectedShed.lat, selectedShed.lng);
@@ -183,7 +182,6 @@ export default function HomePage() {
     else { localStorage.setItem(STORAGE_KEYS.favoriteShed, selectedShed.id); setIsFavorite(true); } 
   };
 
-  // 🚨 UPDATED: May Proximity Check (50m) at Toggle (Cancel)
   const handleManualWaitingPing = () => {
     if (isWaiting) {
       cancelWaitingPing();
@@ -282,6 +280,19 @@ export default function HomePage() {
   const handleFinishOnboarding = () => { localStorage.setItem(STORAGE_KEYS.onboarded, "true"); setShowOnboarding(false); };
   const handleNextOnboard = () => { if (onboardStep < 2) setOnboardStep(prev => prev + 1); else handleFinishOnboarding(); };
 
+  const triggerSOS = async () => {
+    try {
+      await set(ref(database, "sos_alert"), { 
+        id: "sos_" + Date.now(), 
+        shed: selectedShed.name,
+        timestamp: Date.now() 
+      });
+      setShowSosModal(false);
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+      toast("SOS Sent! Na-notify na ang mga driver at authorities.", "success");
+    } catch (err) { console.error(err); }
+  };
+
   const searchedTrips = useMemo(() => {
     if (!searchQuery) return sortedAndFilteredTrips;
     const query = searchQuery.toLowerCase();
@@ -302,14 +313,20 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 flex flex-col items-center relative">
       
+      {/* 🚨 SOS FLOATING BUTTON */}
+      <button 
+        onClick={() => setShowSosModal(true)} 
+        className="fixed bottom-24 right-6 z-50 p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse"
+      >
+        <Siren className="w-8 h-8" />
+      </button>
+
       {activeAlert && (
         <div className={`fixed top-4 z-50 w-full max-w-md px-4 py-3 rounded-xl border shadow-lg flex items-center justify-between animate-in slide-in-from-top-2 ${alertStyles(activeAlert.type)}`}>
           <div className="flex items-center gap-2 font-bold text-sm"><Megaphone className="w-5 h-5" /><span>{activeAlert.type} ({getMinutesAgo(activeAlert.timestamp)}m ago)</span></div>
           <button onClick={handleClearAlert} className="p-1 hover:bg-black/20 rounded-full transition"><X className="w-4 h-4" /></button>
         </div>
       )}
-
-      <button onClick={() => setShowSosModal(true)} className="fixed bottom-24 right-6 z-50 p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse"><Siren className="w-8 h-8" /></button>
 
       <header className="w-full max-w-md my-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -422,10 +439,13 @@ export default function HomePage() {
               const distance = getDistance(selectedShed.lat, selectedShed.lng, trip.location.lat, trip.location.lng);
               const trustScore = trip.reports ? trip.reports.correct - trip.reports.wrong : 0; const isLowTrust = trustScore < -2;
               const hasAlarm = alarms[trip.tripId];
+              
               const estimatedFare = computeFare(distance, trip.vehicleType || "Van", trip.isAircon || false, isDiscounted);
               const fareDisplay = `₱${estimatedFare.toFixed(0)}`;
+              
               const etaMins = estimateEtaMinutes(distance, trip.speed);
               const etaDisplay = formatEta(etaMins);
+              
               const isReported = reportedTrips[trip.tripId];
               const VehicleIcon = trip.vehicleType === "Bus" ? Bus : trip.vehicleType === "Taxi" ? Car : trip.vehicleType === "Tricycle" ? Car : trip.vehicleType === "Motor" ? Car : Bus;
 
@@ -486,7 +506,6 @@ export default function HomePage() {
       </main>
 
       <footer className="text-center text-xs text-slate-500 my-8 pb-16 flex flex-col items-center gap-4">
-        {/* 🚨 GCASH SUPPORT BUTTON */}
         <button 
           onClick={() => setShowGcashModal(true)}
           className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-4 py-2 rounded-full font-bold hover:bg-amber-500/20 transition-all"
@@ -502,32 +521,20 @@ export default function HomePage() {
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200 text-center">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Coffee className="w-5 h-5 text-amber-400" /> Support Biyahe Live
-              </h2>
-              <button onClick={() => setShowGcashModal(false)} className="p-1 text-slate-400 hover:text-white transition">
-                <X className="w-5 h-5" />
-              </button>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Coffee className="w-5 h-5 text-amber-400" /> Support Biyahe Live</h2>
+              <button onClick={() => setShowGcashModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
-            
-            <p className="text-xs text-slate-400 mb-4">
-              Salamat sa pagsuporta! I-scan ang QR code na ito gamit ang GCash o kahit anong InstaPay app.
-            </p>
-
+            <p className="text-xs text-slate-400 mb-4">Salamat sa pagsuporta! I-scan ang QR code gamit ang GCash.</p>
             <div className="bg-white p-4 rounded-2xl mb-4 inline-block shadow-lg">
               <img src="/gcash-qr.png" alt="GCash QR Code" className="w-48 h-48 object-contain" />
             </div>
-
             <p className="text-sm font-bold text-white mb-2">R** M** O.</p>
-            <p className="text-xs text-slate-500">Transfer fees may apply.</p>
-
-            <button onClick={() => setShowGcashModal(false)} className="w-full mt-6 py-3 bg-slate-800 text-white font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">
-              Close
-            </button>
+            <button onClick={() => setShowGcashModal(false)} className="w-full mt-6 py-3 bg-slate-800 text-white font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">Close</button>
           </div>
         </div>
       )}
 
+      {/* 🚨 SLEEP ALARM MODAL */}
       {showSleepAlarm && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -536,21 +543,11 @@ export default function HomePage() {
               <button onClick={() => setShowSleepAlarm(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
             <p className="text-xs text-slate-400 mb-4">Piliin ang iyong babaan. Mag-a-alert ang app kapag malapit na ang sasakyan.</p>
-            
             <div className="flex items-center gap-2 mb-4 bg-slate-950 p-1 rounded-lg border border-slate-800">
               {[2, 1, 0.5].map((dist) => (
-                <button
-                  key={dist}
-                  onClick={() => setSleepAlarmDistance(dist)}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
-                    sleepAlarmDistance === dist ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  {dist} km
-                </button>
+                <button key={dist} onClick={() => setSleepAlarmDistance(dist)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${sleepAlarmDistance === dist ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>{dist} km</button>
               ))}
             </div>
-
             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
               {SHEDS.map(shed => (
                 <button key={shed.id} onClick={() => { setSleepDestination(shed.name); setSleepAlarmActive(true); setShowSleepAlarm(false); if (navigator.vibrate) navigator.vibrate([100, 50, 100]); }} className={`w-full p-3 rounded-xl border text-left font-semibold text-sm transition-all flex items-center justify-between ${sleepDestination === shed.name ? 'bg-indigo-950/50 border-indigo-500 text-indigo-300' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
@@ -559,15 +556,12 @@ export default function HomePage() {
                 </button>
               ))}
             </div>
-            {sleepAlarmActive && (
-              <button onClick={() => { setSleepAlarmActive(false); setSleepDestination(null); }} className="w-full mt-4 py-2 bg-rose-600/20 border border-rose-600/50 text-rose-400 rounded-xl text-xs font-bold hover:bg-rose-600/30 transition-all">
-                Cancel Sleep Alarm
-              </button>
-            )}
+            {sleepAlarmActive && (<button onClick={() => { setSleepAlarmActive(false); setSleepDestination(null); }} className="w-full mt-4 py-2 bg-rose-600/20 border border-rose-600/50 text-rose-400 rounded-xl text-xs font-bold hover:bg-rose-600/30 transition-all">Cancel Sleep Alarm</button>)}
           </div>
         </div>
       )}
 
+      {/* 🚨 REPORT MODAL */}
       {showReportModal && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -592,6 +586,7 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* 🚨 SOS MODAL (PNP, BFP, RESCUE) */}
       {showSosModal && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -623,6 +618,7 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* 🚨 FARE MATRIX MODAL */}
       {showFareMatrix && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -631,12 +627,10 @@ export default function HomePage() {
               <button onClick={() => setShowFareMatrix(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
             <div className="bg-amber-950/30 border border-amber-800/50 rounded-xl p-4 mb-4">
-              <p className="text-xs text-amber-300 leading-relaxed">
-                ⚠️ Base sa LTFRB Region XI Matrix. Ang aktwal na pamasahe ay depende sa exact distance, dagdag, at driver.
-              </p>
+              <p className="text-xs text-amber-300 leading-relaxed">⚠️ Base sa LTFRB Region XI Matrix. Ang aktwal na pamasahe ay depende sa exact distance, dagdag, at driver.</p>
             </div>
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-               {Object.entries({
+              {Object.entries({
                 "Bus (Ordinary / Provincial)": "₱12 + ₱2.20/km",
                 "Bus (Aircon / City)": "₱18 + ₱2.97/km",
                 "UV Express (Van)": "₱2.60/km",
@@ -657,6 +651,7 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* ONBOARDING MODAL */}
       {showOnboarding && (
         <div className="fixed inset-0 z-[200] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-in zoom-in duration-300 text-center flex flex-col items-center">
