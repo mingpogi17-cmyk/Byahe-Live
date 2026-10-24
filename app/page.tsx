@@ -181,11 +181,25 @@ export default function HomePage() {
   };
 
   // 🚨 FALLBACK GPS PARA SA WAITING PING
-  const handleManualWaitingPing = () => {
-    const lat = commuterLocation?.lat || selectedShed.lat;
-    const lng = commuterLocation?.lng || selectedShed.lng;
+    const handleManualWaitingPing = () => {
+    if (!commuterLocation) {
+      // Fallback kung walang GPS
+      sendWaitingPing(selectedShed.lat, selectedShed.lng);
+      setIsWaiting(true);
+      toast("Na-notify na ang mga driver!", "success");
+      return;
+    }
+
+    // Check kung malapit ba talaga siya sa shed (50m radius)
+    const distanceToShed = getDistance(commuterLocation.lat, commuterLocation.lng, selectedShed.lat, selectedShed.lng);
     
-    sendWaitingPing(lat, lng);
+    if (distanceToShed > 0.05) {
+      toast(`Masyado kang malayo sa ${selectedShed.name} (${(distanceToShed).toFixed(1)} km away). Lumapit ka muna sa shed.`, "error");
+      return;
+    }
+
+    // Kapag malapit, saka lang mag-se-send
+    sendWaitingPing(commuterLocation.lat, commuterLocation.lng);
     setIsWaiting(true);
     toast("Na-notify na ang mga driver sa area!", "success");
   };
