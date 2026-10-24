@@ -3,84 +3,35 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { database } from "@/lib/firebase";
-import { ref, onValue, set, remove } from "firebase/database";
+import { ref, set } from "firebase/database";
 import { 
-  Bus, MapPin, Clock, WifiOff, AlertTriangle, Ticket, Navigation, 
+  Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee
 } from "lucide-react";
 
-// 🚨 LTFRB REGION XI FARE RATES
-const FARE_RATES = {
-  jeepney: { base: 14, baseKm: 4, perKm: 2.00, name: "Traditional Jeepney" },
-  modernJeep: { base: 17, baseKm: 4, perKm: 2.40, name: "Modern Jeepney" },
-  provincialBus: { base: 12, baseKm: 5, perKm: 2.20, name: "Provincial Bus" },
-  cityBusOrdinary: { base: 15, baseKm: 5, perKm: 2.49, name: "City Bus (Ordinary)" },
-  cityBusAircon: { base: 18, baseKm: 5, perKm: 2.97, name: "City Bus (Aircon)" },
-  uvExpress: { base: 0, baseKm: 0, perKm: 2.60, name: "UV Express" },
-  motor: { base: 10, baseKm: 2, perKm: 1.50, name: "Motor" },
-};
-
-// 🚨 DAVAO DEL SUR SHEDS ONLY
-const SHEDS = [
-  { id: "digos", name: "Digos", lat: 6.7497, lng: 125.3572 },
-  { id: "sta_cruz", name: "Sta. Cruz", lat: 6.8342, lng: 125.4149 },
-  { id: "bansalan", name: "Bansalan", lat: 6.78611, lng: 125.21333 },
-  { id: "hagonoy", name: "Hagonoy", lat: 6.6892, lng: 125.3256 },
-  { id: "magsaysay", name: "Magsaysay", lat: 6.7667, lng: 125.1833 },
-  { id: "matanao", name: "Matanao", lat: 6.7092, lng: 125.2178 },
-  { id: "padada", name: "Padada", lat: 6.6413, lng: 125.3451 },
-  { id: "sulop", name: "Sulop", lat: 6.6000, lng: 125.3500 },
-  { id: "malalag", name: "Malalag", lat: 6.6000, lng: 125.4000 },
-  { id: "kiblawan", name: "Kiblawan", lat: 6.61417, lng: 125.23667 },
-];
-
-interface TripData {
-  tripId: string; status: "Available" | "Standing" | "Full";
-  location: { lat: number; lng: number }; seatsAvailable?: number; fare?: number;
-  isOutOfService?: boolean; isEmergency?: boolean; isGcashEnabled?: boolean;
-  vehicleType?: "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus"; isAircon?: boolean; plateNumber?: string;
-  speed?: number; updatedAt: number; reports?: { correct: number; wrong: number }; isVerified?: boolean;
-}
-interface CommunityAlert { id: string; type: string; timestamp: number; }
-interface Shed { id: string; name: string; lat: number; lng: number; }
-
-const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371; const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-};
-
-const computeFare = (distanceKm: number, vehicleType: string, isAircon: boolean, discounted: boolean = false) => {
-  let rate = FARE_RATES.uvExpress;
-  if (vehicleType === "Bus") rate = isAircon ? FARE_RATES.cityBusAircon : FARE_RATES.provincialBus;
-  else if (vehicleType === "Tricycle") rate = FARE_RATES.jeepney;
-  else if (vehicleType === "Taxi") rate = FARE_RATES.cityBusOrdinary;
-  else if (vehicleType === "Van") rate = FARE_RATES.uvExpress;
-  else if (vehicleType === "Motor") rate = FARE_RATES.motor;
-
-  let baseFare = rate.base;
-  let perKm = rate.perKm;
-
-  if (discounted) { baseFare = baseFare * 0.8; perKm = perKm * 0.8; }
-
-  if (distanceKm <= rate.baseKm) return baseFare;
-  return baseFare + ((distanceKm - rate.baseKm) * perKm);
-};
+import { SHEDS, STORAGE_KEYS, COOLDOWNS, TripData, Shed } from "@/lib/constants";
+import { getDistance, computeFare, estimateEtaMinutes, formatEta } from "@/lib/geo";
+import { useTrips } from "@/lib/useTrips";
+import { useAlerts } from "@/lib/useAlerts";
+import { useUserId } from "@/lib/useUserId";
+import { useToast } from "@/components/Toast";
 
 export default function HomePage() {
-  const [trips, setTrips] = useState<TripData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isOffline, setIsOffline] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [now, setNow] = useState<number>(Date.now());
-  const [lastRefresh, setLastRefresh] = useState<number>(Date.now());
+  const userId = useUserId();
+  const { toast } = useToast();
   
   const [selectedShed, setSelectedShed] = useState<Shed>(SHEDS[0]);
+  const { activeAlert, waitingCount, sendWaitingPing, cancelWaitingPing, requestStop, sendCommunityReport, clearCommunityAlert } = useAlerts(selectedShed.name);
+  const { trips, loading, errorMsg } = useTrips();
+
+  const [isOffline, setIsOffline] = useState(false);
+  const [now, setNow] = useState<number>(Date.now());
+  
   const [isFavorite, setIsFavorite] = useState(false);
   const [showShedDropdown, setShowShedDropdown] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [activeAlert, setActiveAlert] = useState<CommunityAlert | null>(null);
+  
   const [alarms, setAlarms] = useState<{[key: string]: number}>({});
   const [points, setPoints] = useState(0);
   const [showSosModal, setShowSosModal] = useState(false);
@@ -91,12 +42,14 @@ export default function HomePage() {
   const [vehicleFilter, setVehicleFilter] = useState<"All" | "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus">("All");
   const [comfortFilter, setComfortFilter] = useState<"All" | "Aircon" | "Non-Aircon">("All");
   const [emergencyData, setEmergencyData] = useState<any>(null);
+  
   const [lastReportTime, setLastReportTime] = useState(0);
   const [dailyPoints, setDailyPoints] = useState(0);
   const [lastMilestone, setLastMilestone] = useState<number>(0);
+  
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardStep, setOnboardStep] = useState(0);
-  const [waitingCount, setWaitingCount] = useState(0);
+  
   const [isDiscounted, setIsDiscounted] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showSleepAlarm, setShowSleepAlarm] = useState(false);
@@ -105,12 +58,18 @@ export default function HomePage() {
   const [commuterLocation, setCommuterLocation] = useState<{lat: number, lng: number} | null>(null);
 
   useEffect(() => {
-    const savedPoints = localStorage.getItem("biyahe_points");
+    const savedPoints = localStorage.getItem(STORAGE_KEYS.points);
     if (savedPoints) setPoints(parseInt(savedPoints));
-    const savedDaily = localStorage.getItem("biyahe_daily_points");
+    
+    const savedDaily = localStorage.getItem(STORAGE_KEYS.dailyPoints);
     if (savedDaily) setDailyPoints(parseInt(savedDaily));
-    const hasOnboarded = localStorage.getItem("biyahe_onboarded");
+    
+    const savedReportTime = localStorage.getItem(STORAGE_KEYS.lastReportTime);
+    if (savedReportTime) setLastReportTime(parseInt(savedReportTime));
+
+    const hasOnboarded = localStorage.getItem(STORAGE_KEYS.onboarded);
     if (!hasOnboarded) setShowOnboarding(true);
+    
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
@@ -126,34 +85,21 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    const waitingRef = ref(database, "waiting_commuters");
-    const unsub = onValue(waitingRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.val();
-        let count = 0;
-        Object.values(data).forEach((val: any) => {
-          if (val.shed === selectedShed.name && (!val.expiresAt || Date.now() < val.expiresAt)) count++;
-        });
-        setWaitingCount(count);
-      } else setWaitingCount(0);
-    });
-    return () => unsub();
-  }, [selectedShed]);
-
-  useEffect(() => {
     if (!commuterLocation) return;
     const distanceToShed = getDistance(commuterLocation.lat, commuterLocation.lng, selectedShed.lat, selectedShed.lng);
     const isNearShed = distanceToShed <= 0.05;
     
-    if (isNearShed && !isWaiting) { handleWaitingPing(true); }
-    else if (!isNearShed && isWaiting) {
-      remove(ref(database, "waiting_commuters")).catch(() => {});
+    if (isNearShed && !isWaiting) { 
+      sendWaitingPing(commuterLocation.lat, commuterLocation.lng); 
+      setIsWaiting(true); 
+    } else if (!isNearShed && isWaiting) {
+      cancelWaitingPing();
       setIsWaiting(false);
     }
-  }, [commuterLocation, selectedShed]);
+  }, [commuterLocation, selectedShed, isWaiting, sendWaitingPing, cancelWaitingPing]);
 
   useEffect(() => {
-    const savedShedId = localStorage.getItem("favorite_shed");
+    const savedShedId = localStorage.getItem(STORAGE_KEYS.favoriteShed);
     if (savedShedId) {
       const shed = SHEDS.find(s => s.id === savedShedId);
       if (shed) { setSelectedShed(shed); setIsFavorite(true); }
@@ -175,35 +121,6 @@ export default function HomePage() {
       setEmergencyData(data[shedKey || "Default"]);
     }).catch(err => console.error("Emergency fetch error:", err));
   }, [selectedShed]);
-
-  useEffect(() => {
-    setLoading(true);
-    const tripsRef = ref(database, "live_trips");
-    const reportsRef = ref(database, "reports");
-    const alertRef = ref(database, "community_alert");
-
-    const unsubTrips = onValue(tripsRef, (snapshot) => {
-      setLoading(false); setErrorMsg(null); setLastRefresh(Date.now());
-      if (snapshot.exists()) setTrips(Object.values(snapshot.val())); else setTrips([]);
-    }, () => { setLoading(false); setErrorMsg("Hindi makakonekta sa server."); });
-
-    const unsubReports = onValue(reportsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const reportsData = snapshot.val();
-        setTrips(prev => prev.map(trip => ({ ...trip, reports: reportsData[trip.tripId] || { correct: 0, wrong: 0 } })));
-      }
-    });
-
-    const unsubAlert = onValue(alertRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const alertData = snapshot.val();
-        if (alertData.expiresAt && Date.now() > alertData.expiresAt) { remove(alertRef); setActiveAlert(null); }
-        else setActiveAlert(alertData);
-      } else setActiveAlert(null);
-    });
-
-    return () => { unsubTrips(); unsubReports(); unsubAlert(); };
-  }, []);
 
   const sortedAndFilteredTrips = useMemo(() => {
     let filtered = trips.filter(trip => {
@@ -228,95 +145,134 @@ export default function HomePage() {
     if (sortedAndFilteredTrips.length > 0) {
       const nearestTrip = sortedAndFilteredTrips[0];
       const distance = getDistance(selectedShed.lat, selectedShed.lng, nearestTrip.location.lat, nearestTrip.location.lng);
-      if (distance <= 0.5 && lastMilestone < 3) { if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]); alert("🔔 500m away! Hapit na moabot."); setLastMilestone(3); }
-      else if (distance <= 1 && lastMilestone < 2) { if (navigator.vibrate) navigator.vibrate([100, 50, 100]); alert("⏳ 1km away! Paghanda na."); setLastMilestone(2); }
-      else if (distance <= 2 && lastMilestone < 1) { if (navigator.vibrate) navigator.vibrate([100]); alert("🚐 2km away! Hapit na."); setLastMilestone(1); }
+      
+      if (distance > 2.5 && lastMilestone > 0) {
+        setLastMilestone(0);
+      }
+
+      if (distance <= 0.5 && lastMilestone < 3) { 
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]); 
+        toast("🔔 500m away! Hapit na moabot.", "success"); 
+        setLastMilestone(3); 
+      }
+      else if (distance <= 1 && lastMilestone < 2) { 
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
+        toast("⏳ 1km away! Paghanda na.", "info"); 
+        setLastMilestone(2); 
+      }
+      else if (distance <= 2 && lastMilestone < 1) { 
+        if (navigator.vibrate) navigator.vibrate([100]); 
+        toast("🚐 2km away! Hapit na.", "info"); 
+        setLastMilestone(1); 
+      }
     }
-  }, [sortedAndFilteredTrips, selectedShed, lastMilestone]);
+  }, [sortedAndFilteredTrips, selectedShed, lastMilestone, toast]);
 
   useEffect(() => {
-    if (!sleepAlarmActive || !sleepDestination) return;
-    if (sortedAndFilteredTrips.length === 0) return;
+    if (!sleepAlarmActive || !sleepDestination || sortedAndFilteredTrips.length === 0) return;
     const nearestTrip = sortedAndFilteredTrips[0];
     const destShed = SHEDS.find(s => s.name === sleepDestination);
     if (!destShed) return;
+    
     const distanceToDest = getDistance(nearestTrip.location.lat, nearestTrip.location.lng, destShed.lat, destShed.lng);
     if (distanceToDest <= 2) {
       if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
-      alert(`🔔 Gising na! Malapit na ang sasakyan sa ${sleepDestination} (${distanceToDest.toFixed(1)}km away).`);
+      toast(`🔔 Gising na! Malapit na ang sasakyan sa ${sleepDestination} (${distanceToDest.toFixed(1)}km away).`, "success");
       setSleepAlarmActive(false);
       setSleepDestination(null);
     }
-  }, [sortedAndFilteredTrips, sleepAlarmActive, sleepDestination]);
+  }, [sortedAndFilteredTrips, sleepAlarmActive, sleepDestination, toast]);
 
   const getMinutesAgo = (timestamp: number) => Math.max(0, Math.floor((now - timestamp) / 60000));
-  const handleFavoriteShed = () => { if (isFavorite) { localStorage.removeItem("favorite_shed"); setIsFavorite(false); } else { localStorage.setItem("favorite_shed", selectedShed.id); setIsFavorite(true); } };
-  const handleManualRefresh = () => { setLoading(true); setLastRefresh(Date.now()); setTimeout(() => setLoading(false), 500); };
-
-  const handleWaitingPing = async (silent: boolean = false) => {
-    try {
-      await set(ref(database, "waiting_commuters"), { 
-        id: Date.now(), shed: selectedShed.name, timestamp: Date.now(), 
-        expiresAt: Date.now() + (5 * 60 * 1000),
-        lat: commuterLocation?.lat || selectedShed.lat,
-        lng: commuterLocation?.lng || selectedShed.lng
-      });
-      setIsWaiting(true); 
-      if (!silent) alert("Na-notify na ang mga driver sa area!");
-    } catch (err) { console.error(err); }
+  
+  const handleFavoriteShed = () => { 
+    if (isFavorite) { localStorage.removeItem(STORAGE_KEYS.favoriteShed); setIsFavorite(false); } 
+    else { localStorage.setItem(STORAGE_KEYS.favoriteShed, selectedShed.id); setIsFavorite(true); } 
   };
 
-  const handleRequestStop = async () => {
-    try {
-      await set(ref(database, "stop_request"), { id: Date.now(), shed: selectedShed.name, timestamp: Date.now() });
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]); alert("🔔 Na-notify na ang driver!");
-    } catch (err) { console.error(err); }
+  const handleManualWaitingPing = () => {
+    if (!commuterLocation) return toast("Hindi ma-detect ang GPS. I-on ang location.", "error");
+    sendWaitingPing(commuterLocation.lat, commuterLocation.lng);
+    setIsWaiting(true);
+    toast("Na-notify na ang mga driver sa area!", "success");
+  };
+
+  const handleRequestStop = () => {
+    requestStop();
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]); 
+    toast("🔔 Na-notify na ang driver na bababa ka!", "success");
   };
 
   const handleReport = async (tripId: string, type: "correct" | "wrong") => {
-    if (reportedTrips[tripId]) return alert("Naka-report ka na.");
+    if (reportedTrips[tripId]) return toast("Naka-report ka na dito.", "info");
     try {
       const trip = trips.find(t => t.tripId === tripId);
       const currentReports = trip?.reports || { correct: 0, wrong: 0 };
-      const updates = { correct: type === "correct" ? (currentReports.correct + 1) : currentReports.correct, wrong: type === "wrong" ? (currentReports.wrong + 1) : currentReports.wrong };
+      const updates = { 
+        correct: type === "correct" ? (currentReports.correct + 1) : currentReports.correct, 
+        wrong: type === "wrong" ? (currentReports.wrong + 1) : currentReports.wrong 
+      };
+      
       await set(ref(database, `reports/${tripId}`), updates);
       if (navigator.vibrate) navigator.vibrate(50);
-      const newPoints = points + 5; setPoints(newPoints); localStorage.setItem("biyahe_points", newPoints.toString()); setReportedTrips(prev => ({ ...prev, [tripId]: true }));
-    } catch (err) { console.error(err); }
+      
+      const newPoints = points + 5; 
+      setPoints(newPoints); 
+      localStorage.setItem(STORAGE_KEYS.points, newPoints.toString()); 
+      setReportedTrips(prev => ({ ...prev, [tripId]: true }));
+      toast("Salamat sa report! +5 Points", "success");
+    } catch (err) { 
+      console.error(err); 
+      toast("Error sa pag-report. Subukan muli.", "error");
+    }
   };
 
   const handleCommunityReport = async (type: string) => {
-    if (Date.now() - lastReportTime < 10 * 60 * 1000) return alert("Nag-report ka na kamakailan lang.");
-    if (dailyPoints >= 50) return alert("Naabot mo na ang max points ngayong araw.");
+    if (Date.now() - lastReportTime < COOLDOWNS.communityReportMs) return toast("Nag-report ka na kamakailan lang.", "info");
+    if (dailyPoints >= COOLDOWNS.dailyPointCap) return toast("Naabot mo na ang max points ngayong araw.", "info");
     try {
-      const newPoints = points + 5; const newDailyPoints = dailyPoints + 5;
-      setPoints(newPoints); setDailyPoints(newDailyPoints);
-      localStorage.setItem("biyahe_points", newPoints.toString()); localStorage.setItem("biyahe_daily_points", newDailyPoints.toString()); setLastReportTime(Date.now());
-      await set(ref(database, "community_alert"), { id: "alert_" + Date.now(), type, timestamp: Date.now(), expiresAt: Date.now() + (5 * 60 * 1000) });
-      setShowReportModal(false); if (navigator.vibrate) navigator.vibrate(50); alert(`Salamat! +5 Points!`);
+      const newPoints = points + 5; 
+      const newDailyPoints = dailyPoints + 5;
+      const newTime = Date.now();
+      
+      setPoints(newPoints); 
+      setDailyPoints(newDailyPoints);
+      setLastReportTime(newTime);
+      
+      localStorage.setItem(STORAGE_KEYS.points, newPoints.toString()); 
+      localStorage.setItem(STORAGE_KEYS.dailyPoints, newDailyPoints.toString()); 
+      localStorage.setItem(STORAGE_KEYS.lastReportTime, newTime.toString());
+      
+      await sendCommunityReport(type);
+      setShowReportModal(false); 
+      if (navigator.vibrate) navigator.vibrate(50); 
+      toast(`Salamat! +5 Points!`, "success");
     } catch (err) { console.error(err); }
   };
 
-  const handleClearAlert = async () => { try { await remove(ref(database, "community_alert")); } catch (err) {} };
+  const handleClearAlert = async () => { 
+    try { await clearCommunityAlert(); } catch (err) {} 
+  };
+
   const handleShare = async (trip: TripData) => {
     const text = `Biyahe Live: May ${trip.status === "Available" ? `${trip.seatsAvailable} upuan` : trip.status} sa ${selectedShed.name}! ${window.location.href}`;
     if (navigator.share) { try { await navigator.share({ title: "Biyahe Live", text }); } catch (e) {} }
-    else { await navigator.clipboard.writeText(text); alert("Copied!"); }
+    else { await navigator.clipboard.writeText(text); toast("Copied sa clipboard!", "success"); }
   };
 
   const toggleAlarm = (tripId: string) => {
-    if (alarms[tripId]) { const newAlarms = { ...alarms }; delete newAlarms[tripId]; setAlarms(newAlarms); }
-    else { setAlarms(prev => ({ ...prev, [tripId]: Date.now() + 10 * 60 * 1000 })); if (navigator.vibrate) navigator.vibrate([100, 50, 100]); alert("Alarm set!"); }
+    if (alarms[tripId]) { 
+      const newAlarms = { ...alarms }; delete newAlarms[tripId]; setAlarms(newAlarms); 
+      toast("Alarm cancelled.", "info");
+    }
+    else { 
+      setAlarms(prev => ({ ...prev, [tripId]: Date.now() + COOLDOWNS.alarmDefaultMs })); 
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
+      toast("Alarm set! (10 mins)", "success"); 
+    }
   };
 
-  const triggerSOS = async () => {
-    try {
-      await set(ref(database, "sos_alert"), { id: "sos_" + Date.now(), shed: selectedShed.name, timestamp: Date.now() });
-      setShowSosModal(false); if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]); alert("SOS Sent!");
-    } catch (err) { console.error(err); }
-  };
-
-  const handleFinishOnboarding = () => { localStorage.setItem("biyahe_onboarded", "true"); setShowOnboarding(false); };
+  const handleFinishOnboarding = () => { localStorage.setItem(STORAGE_KEYS.onboarded, "true"); setShowOnboarding(false); };
   const handleNextOnboard = () => { if (onboardStep < 2) setOnboardStep(prev => prev + 1); else handleFinishOnboarding(); };
 
   const searchedTrips = useMemo(() => {
@@ -365,7 +321,7 @@ export default function HomePage() {
       <main className="w-full max-w-md space-y-4 pt-4">
         
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => handleWaitingPing(false)} disabled={isWaiting} className={`py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 transition-all ${isWaiting ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/50 cursor-not-allowed' : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'}`}>
+          <button onClick={handleManualWaitingPing} disabled={isWaiting} className={`py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 transition-all ${isWaiting ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/50 cursor-not-allowed' : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'}`}>
             <BellRing className="w-6 h-6" /> {isWaiting ? "Waiting..." : "Naghihintay Ako"}
           </button>
           <button onClick={handleRequestStop} className="py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg">
@@ -458,6 +414,9 @@ export default function HomePage() {
               const estimatedFare = computeFare(distance, trip.vehicleType || "Van", trip.isAircon || false, isDiscounted);
               const fareDisplay = `₱${estimatedFare.toFixed(0)}`;
               
+              const etaMins = estimateEtaMinutes(distance, trip.speed);
+              const etaDisplay = formatEta(etaMins);
+              
               const isReported = reportedTrips[trip.tripId];
               const VehicleIcon = trip.vehicleType === "Bus" ? Bus : trip.vehicleType === "Taxi" ? Car : trip.vehicleType === "Tricycle" ? Car : trip.vehicleType === "Motor" ? Car : Bus;
 
@@ -484,8 +443,18 @@ export default function HomePage() {
                   </div>
                   
                   <div className="flex items-center justify-between pt-3 border-t border-slate-800/80 text-xs text-slate-400">
-                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {minsAgo === 0 ? "Ngayon lang" : `${minsAgo} min`}</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {minsAgo === 0 ? "Ngayon lang" : `${minsAgo} min`} 
+                      <span className="ml-2 px-1.5 py-0.5 bg-slate-800 rounded flex items-center gap-1 text-[10px] text-emerald-400 font-semibold"><Timer className="w-3 h-3" /> ETA: {etaDisplay}</span>
+                    </span>
                     <div className="flex items-center gap-3">
+                      <a 
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${trip.location.lat},${trip.location.lng}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-blue-400 hover:text-blue-300 font-semibold transition-colors"
+                      >
+                        <Navigation className="w-3.5 h-3.5" /> Map
+                      </a>
                       <button onClick={() => toggleAlarm(trip.tripId)} className={`flex items-center gap-1 transition-colors ${hasAlarm ? 'text-amber-400 font-bold' : 'text-slate-500 hover:text-slate-300'}`}>
                         {hasAlarm ? <BellRing className="w-3.5 h-3.5 animate-pulse" /> : <Bell className="w-3.5 h-3.5" />} {hasAlarm ? "Alarm On" : "Set Alarm"}
                       </button>
@@ -507,7 +476,17 @@ export default function HomePage() {
         )}
       </main>
 
-      <footer className="text-center text-xs text-slate-500 my-8 pb-16 flex flex-col items-center gap-2">
+      <footer className="text-center text-xs text-slate-500 my-8 pb-16 flex flex-col items-center gap-4">
+        {/* BUY ME A COFFEE BUTTON */}
+        <a 
+          href="https://ko-fi.com/yourusername" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-4 py-2 rounded-full font-bold hover:bg-amber-500/20 transition-all"
+        >
+          <Coffee className="w-4 h-4" /> Support Biyahe Live
+        </a>
+
         <p>Biyahe Live © 2026 · Developed by Ray Mar Olandria</p>
         <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline transition-colors">Privacy Policy & Terms of Service</Link>
       </footer>
@@ -517,7 +496,7 @@ export default function HomePage() {
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Bed className="w-5 h-5 text-indigo-400" /> Pahinga Mode (Sleep Alarm)</h2>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Bed className="w-5 h-5 text-indigo-400" /> Pahinga Mode</h2>
               <button onClick={() => setShowSleepAlarm(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
             <p className="text-xs text-slate-400 mb-4">Piliin ang iyong babaan. Mag-a-alert ang app kapag malapit na ang sasakyan (2km away).</p>
@@ -534,23 +513,23 @@ export default function HomePage() {
                 Cancel Sleep Alarm
               </button>
             )}
-            <button onClick={() => setShowSleepAlarm(false)} className="w-full mt-2 py-3 bg-slate-800 text-white font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">Close</button>
           </div>
         </div>
       )}
 
+      {/* 🚨 REPORT MODAL */}
       {showReportModal && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Megaphone className="w-5 h-5 text-amber-400" /> Abiso sa Kapwa Commuter</h2>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Megaphone className="w-5 h-5 text-amber-400" /> Abiso sa Kapwa</h2>
               <button onClick={() => setShowReportModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
             <p className="text-xs text-slate-400 mb-4">Pumili ng sitwasyon sa waiting shed ngayon.</p>
             <div className="space-y-2">
               {[
-                { icon: "🚐", label: "May Dumaan na Van/Bus" },
-                { icon: "🚦", label: "Traffic / Mabagal ang Daloy" },
+                { icon: "🚐", label: "May Dumaan" },
+                { icon: "🚦", label: "Traffic" },
                 { icon: "🚔", label: "May Checkpoint / Enforcer" },
                 { icon: "⏳", label: "Matagal nang Walang Dumadaan" },
               ].map((item) => (
@@ -563,11 +542,12 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* 🚨 SOS MODAL */}
       {showSosModal && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-black text-white flex items-center gap-2"><Siren className="w-6 h-6 text-rose-500 animate-pulse" /> Emergency Hotlines</h2>
+              <h2 className="text-2xl font-black text-white flex items-center gap-2"><Siren className="w-6 h-6 text-rose-500 animate-pulse" /> Hotlines</h2>
               <button onClick={() => setShowSosModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
             <p className="text-sm text-rose-200 mb-4">Location: <span className="font-bold text-white">{selectedShed.name}</span></p>
@@ -582,15 +562,14 @@ export default function HomePage() {
                   <Phone className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
                 </a>
                 <a href={`tel:${emergencyData.rescue}`} className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-all group">
-                  <div className="flex items-center gap-3"><div className="p-2 bg-emerald-950 text-emerald-400 rounded-lg"><HeartPulse className="w-5 h-5" /></div><div><p className="font-bold text-white text-sm">Rescue / MDRRMO {selectedShed.name}</p><p className="text-xs text-slate-400">{emergencyData.rescue}</p></div></div>
+                  <div className="flex items-center gap-3"><div className="p-2 bg-emerald-950 text-emerald-400 rounded-lg"><HeartPulse className="w-5 h-5" /></div><div><p className="font-bold text-white text-sm">MDRRMO {selectedShed.name}</p><p className="text-xs text-slate-400">{emergencyData.rescue}</p></div></div>
                   <Phone className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
                 </a>
               </div>
-            ) : (<p className="text-center text-slate-400 py-4">Kinakarga ang emergency contacts...</p>)}
+            ) : (<p className="text-center text-slate-400 py-4">Kinakarga ang contacts...</p>)}
             <div className="mt-4 pt-4 border-t border-rose-800/50">
               <a href="tel:911" className="flex items-center justify-center w-full py-3 bg-rose-600 text-white font-black rounded-xl shadow-lg hover:bg-rose-500 transition-all gap-2"><Siren className="w-5 h-5" /> CALL 911 (National)</a>
             </div>
-            <p className="text-center text-[10px] text-rose-300/80 mt-3">Kung wala ka sa {selectedShed.name}, i-dial ang 911.</p>
           </div>
         </div>
       )}
@@ -605,55 +584,37 @@ export default function HomePage() {
             </div>
             <div className="bg-amber-950/30 border border-amber-800/50 rounded-xl p-4 mb-4">
               <p className="text-xs text-amber-300 leading-relaxed">
-                ⚠️ Base sa LTFRB Region XI Matrix. Ang aktwal na pamasahe ay depende sa exact distance, dagdag (aircon, bagahe), at driver. Paki-kumpirma sa konduktor.
+                ⚠️ Base sa LTFRB Region XI Matrix. Ang aktwal na pamasahe ay depende sa exact distance, dagdag, at driver.
               </p>
             </div>
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
-                <span className="text-sm text-slate-300">Provincial Bus (Ordinary)</span>
-                <span className="text-sm font-black text-amber-400">₱12 + ₱2.20/km</span>
-              </div>
-              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
-                <span className="text-sm text-slate-300">City Bus (Aircon)</span>
-                <span className="text-sm font-black text-amber-400">₱18 + ₱2.97/km</span>
-              </div>
-              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
-                <span className="text-sm text-slate-300">UV Express (Van)</span>
-                <span className="text-sm font-black text-amber-400">₱2.60/km</span>
-              </div>
-              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
-                <span className="text-sm text-slate-300">Traditional Jeepney</span>
-                <span className="text-sm font-black text-amber-400">₱14 + ₱2.00/km</span>
-              </div>
-              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
-                <span className="text-sm text-slate-300">Modern Jeepney</span>
-                <span className="text-sm font-black text-amber-400">₱17 + ₱2.40/km</span>
-              </div>
-              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
-                <span className="text-sm text-slate-300">Taxi (Metered)</span>
-                <span className="text-sm font-black text-amber-400">₱45-₱50 flagdown</span>
-              </div>
-              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
-                <span className="text-sm text-slate-300">Motor/Tricycle</span>
-                <span className="text-sm font-black text-amber-400">₱10 + ₱1.50/km</span>
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-slate-800">
-              <p className="text-[10px] text-slate-500 text-center leading-relaxed">
-                💡 20% discount para sa Student, Senior, PWD, at Pregnant. I-on ang toggle sa More Options.
-              </p>
+              {Object.entries({
+                "Provincial Bus": "₱12 + ₱2.20/km",
+                "City Bus (Aircon)": "₱18 + ₱2.97/km",
+                "UV Express (Van)": "₱2.60/km",
+                "Traditional Jeepney": "₱14 + ₱2.00/km",
+                "Modern Jeepney": "₱17 + ₱2.40/km",
+                "Taxi (Metered)": "₱45-₱50 flagdown",
+                "Motor/Tricycle": "₱10 + ₱1.50/km"
+              }).map(([name, price]) => (
+                <div key={name} className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
+                  <span className="text-sm text-slate-300">{name}</span>
+                  <span className="text-sm font-black text-amber-400">{price}</span>
+                </div>
+              ))}
             </div>
             <button onClick={() => setShowFareMatrix(false)} className="w-full mt-4 py-3 bg-amber-500 text-slate-950 font-black rounded-xl text-sm hover:bg-amber-400 transition-all">Close</button>
           </div>
         </div>
       )}
 
+      {/* ONBOARDING MODAL */}
       {showOnboarding && (
         <div className="fixed inset-0 z-[200] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-in zoom-in duration-300 text-center flex flex-col items-center">
             {onboardStep === 0 && (<><div className="p-4 bg-emerald-950/80 rounded-full mb-6 border border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.3)]"><Bus className="w-12 h-12 text-emerald-400" /></div><h2 className="text-2xl font-black text-white mb-2">Welcome sa Biyahe Live!</h2><p className="text-sm text-slate-400 mb-8">Ang iyong kasama sa pag-commute sa Davao del Sur.</p></>)}
-            {onboardStep === 1 && (<><div className="p-4 bg-amber-950/80 rounded-full mb-6 border border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.3)]"><Wallet className="w-12 h-12 text-amber-400" /></div><h2 className="text-2xl font-black text-white mb-2">Mabilis at Madali</h2><p className="text-sm text-slate-400 mb-8">Kumuha ng QR Ticket para sa priority seat, mag-report ng sitwasyon, at makakuha ng Biyahe Points!</p></>)}
-            {onboardStep === 2 && (<><div className="p-4 bg-rose-950/80 rounded-full mb-6 border border-rose-500/50 shadow-[0_0_30px_rgba(244,63,94,0.3)]"><Siren className="w-12 h-12 text-rose-400" /></div><h2 className="text-2xl font-black text-white mb-2">Emergency Ready</h2><p className="text-sm text-slate-400 mb-8">May SOS button para sa emergency. I-tap lang ito para ma-alert ang mga driver at authorities sa area.</p></>)}
+            {onboardStep === 1 && (<><div className="p-4 bg-amber-950/80 rounded-full mb-6 border border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.3)]"><Wallet className="w-12 h-12 text-amber-400" /></div><h2 className="text-2xl font-black text-white mb-2">Mabilis at Madali</h2><p className="text-sm text-slate-400 mb-8">Kumuha ng QR Ticket, mag-report ng sitwasyon, at makakuha ng Biyahe Points!</p></>)}
+            {onboardStep === 2 && (<><div className="p-4 bg-rose-950/80 rounded-full mb-6 border border-rose-500/50 shadow-[0_0_30px_rgba(244,63,94,0.3)]"><Siren className="w-12 h-12 text-rose-400" /></div><h2 className="text-2xl font-black text-white mb-2">Emergency Ready</h2><p className="text-sm text-slate-400 mb-8">May SOS button para sa emergency. I-tap lang ito para ma-alert ang authorities.</p></>)}
             <div className="flex gap-2 w-full mt-4">
               <button onClick={handleFinishOnboarding} className="flex-1 py-3 bg-slate-800 text-slate-400 font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">Skip</button>
               <button onClick={handleNextOnboard} className="flex-1 py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm hover:bg-emerald-400 transition-all">{onboardStep === 2 ? "Get Started" : "Next"}</button>
