@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { database } from "@/lib/firebase";
-import { ref, onValue, set, remove, update } from "firebase/database";
+import { ref, onValue, set, remove } from "firebase/database";
 import { 
   Navigation, Users, Settings, ShieldCheck, 
-  WifiOff, Siren, ArrowLeft, Play, Square 
+  WifiOff, Siren, ArrowLeft, Play, Square, MapPin
 } from "lucide-react";
 import { useUserId } from "@/lib/useUserId";
 import { useToast } from "@/components/Toast";
+import { getDistance } from "@/lib/geo"; // 🚨 IMPORTANTE ITO PARA SA DISTANCE
 
 export default function DriverDashboard() {
   const userId = useUserId();
@@ -17,7 +18,6 @@ export default function DriverDashboard() {
 
   // STATES
   const [isTripActive, setIsTripActive] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
   const [vehicleType, setVehicleType] = useState<"Van" | "Bus" | "Taxi" | "Tricycle">("Van");
   const [isAircon, setIsAircon] = useState(true);
   const [seats, setSeats] = useState(14);
@@ -26,52 +26,82 @@ export default function DriverDashboard() {
   
   // ALERTS STATE
   const [waitingCount, setWaitingCount] = useState(0);
+  const [waitingByShed, setWaitingByShed] = useState<Record<string, number>>({});
   const [showStopAlert, setShowStopAlert] = useState(false);
   const [showSosAlert, setShowSosAlert] = useState(false);
   
   // GPS Ref
   const watchIdRef = useRef<number | null>(null);
 
-  // 1. PULSE INDICATOR (Bilang ng naghihintay)
+  // Dynamic Seats logic
+  const maxSeatsMap = { Van: 14, Bus: 49, Taxi: 4, Tricycle: 6 };
+
+  // 1. PULSE INDICATOR & WAITING PER SHED (May Distance Filter)
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
     const unsub = onValue(waitingRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        let activeCount = 0;
-        Object.values(data).forEach((val: any) => {
-          if (!val.expiresAt || Date.now() < val.expiresAt) activeCount++;
+      if (snapshot.exists() && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          const driverLat = pos.coords.latitude;
+          const driverLng = pos.coords.longitude;
+
+          const data = snapshot.val();
+          const counts: Record<string, number> = {};
+          let total = 0;
+
+          Object.values(data).forEach((val: any) => {
+            if (!val.expiresAt || Date.now() < val.expiresAt) {
+              // Check kung malapit lang (within 15km radius)
+              const dist = getDistance(driverLat, driverLng, val.lat, val.lng);
+              if (dist <= 15) {
+                counts[val.shed] = (counts[val.shed] || 0) + 1;
+                total++;
+              }
+            }
+          });
+
+          setWaitingByShed(counts);
+          setWaitingCount(total);
         });
-        setWaitingCount(activeCount);
       } else {
+        setWaitingByShed({});
         setWaitingCount(0);
       }
     });
     return () => unsub();
   }, []);
 
-  // 2. STOP REQUEST & AUDIO ALERT (Bababa Ako)
+  // 2. STOP REQUEST & AUDIO ALERT (May Distance Filter)
   useEffect(() => {
     const stopRef = ref(database, "stop_request");
     const unsub = onValue(stopRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        // Check kung may request na wala pang 1 minuto
-        const hasRecentRequest = Object.values(data).some((req: any) => 
-          Date.now() - req.timestamp < 60000 
-        );
+      if (snapshot.exists() && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          const driverLat = pos.coords.latitude;
+          const driverLng = pos.coords.longitude;
 
-        if (hasRecentRequest) {
-          // 🎵 AUDIO UNLOCK LOGIC (Papatunugin)
-          try {
-            const audio = new Audio('/notification.mp3'); 
-            audio.play().catch(e => console.log("Audio blocked:", e));
-          } catch(e) {}
-          
-          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-          setShowStopAlert(true);
-          setTimeout(() => setShowStopAlert(false), 5000);
-        }
+          const data = snapshot.val();
+          const hasRecentRequest = Object.values(data).some((req: any) => {
+            // 1. Check kung bago pa (within 1 min)
+            const isRecent = Date.now() - req.timestamp < 60000;
+            if (!isRecent) return false;
+
+            // 2. Check kung malapit lang (within 15km radius)
+            const dist = getDistance(driverLat, driverLng, req.lat || 6.7497, req.lng || 125.3572);
+            return dist <= 15;
+          });
+
+          if (hasRecentRequest) {
+            try {
+              const audio = new Audio('/notification.mp3'); 
+              audio.play().catch(e => console.log("Audio blocked:", e));
+            } catch(e) {}
+            
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            setShowStopAlert(true);
+            setTimeout(() => setShowStopAlert(false), 5000);
+          }
+        });
       }
     });
     return () => unsub();
@@ -89,7 +119,6 @@ export default function DriverDashboard() {
         if (hasRecentSos) {
           setShowSosAlert(true);
           if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
-          // Emergency sound (kung meron ka)
           try {
             const audio = new Audio('/siren.mp3');
             audio.play().catch(e => console.log(e));
@@ -100,7 +129,7 @@ export default function DriverDashboard() {
     return () => unsub();
   }, []);
 
-  // 4. LIVE GPS TRACKING (Kapag nag-Start Trip)
+  // 4. LIVE GPS TRACKING
   useEffect(() => {
     if (isTripActive && userId) {
       if (navigator.geolocation) {
@@ -114,7 +143,7 @@ export default function DriverDashboard() {
               fare,
               status: seats > 0 ? "Available" : "Full",
               location: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-              speed: (pos.coords.speed || 0) * 3.6, // Convert m/s to km/h
+              speed: (pos.coords.speed || 0) * 3.6,
               updatedAt: Date.now(),
               isOutOfService: false
             };
@@ -125,7 +154,6 @@ export default function DriverDashboard() {
         );
       }
     } else {
-      // Kapag nag-END TRIP, burahin sa live_trips
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
@@ -145,7 +173,6 @@ export default function DriverDashboard() {
   const handleStartTrip = () => {
     setIsTripActive(true);
     toast("Biyahe Started! Ingat sa byahe.", "success");
-    // Unlock Audio sa first click
     try { new Audio('/notification.mp3').play().catch(()=>{}); } catch(e) {}
   };
 
@@ -214,12 +241,33 @@ export default function DriverDashboard() {
       {/* MAIN DASHBOARD CARD */}
       <main className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
         
+        {/* 🚨 WAITING PER SHED INDICATOR */}
+        {Object.keys(waitingByShed).length > 0 && (
+          <div className="bg-emerald-950/30 border border-emerald-800/50 p-3 rounded-2xl mb-2 animate-in fade-in">
+            <p className="text-[10px] text-emerald-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-1">
+              <Users className="w-3 h-3" /> May Naghihintay Sa:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(waitingByShed).map(([shedName, count]) => (
+                <div key={shedName} className="flex items-center gap-1.5 bg-emerald-900/50 px-2.5 py-1 rounded-lg border border-emerald-700/50">
+                  <MapPin className="w-3 h-3 text-emerald-400" />
+                  <span className="text-xs font-bold text-white">{shedName}:</span>
+                  <span className="text-xs font-black text-emerald-300">{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* VEHICLE SELECTOR */}
         <div className="flex items-center justify-between bg-slate-950 p-1 rounded-xl border border-slate-800">
           {["Van", "Bus", "Taxi", "Tricycle"].map((v) => (
             <button 
               key={v} 
-              onClick={() => setVehicleType(v as any)}
+              onClick={() => {
+                setVehicleType(v as any);
+                setSeats(maxSeatsMap[v as keyof typeof maxSeatsMap]);
+              }}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${vehicleType === v ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
             >
               {v}
