@@ -7,8 +7,10 @@ export default function ScanPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 flex flex-col items-center justify-center">
       <div className="w-full max-w-md text-center space-y-6">
+        
+        {/* BALIK SA DRIVER DASHBOARD */}
         <div className="flex justify-start">
-          <Link href="/driver/scan"> className="p-2 bg-slate-800 rounded-lg text-slate-300 hover:bg-slate-700">
+          <Link href="/driver" className="p-2 bg-slate-800 rounded-lg text-slate-300 hover:bg-slate-700 transition">
             <ArrowLeft className="w-6 h-6" />
           </Link>
         </div>
@@ -20,6 +22,7 @@ export default function ScanPage() {
             Dito na ilalagay yung camera scanner para sa QR tickets ng mga pasahero.
           </p>
         </div>
+
       </div>
     </div>
   );

@@ -278,7 +278,7 @@ export default function DriverDashboard() {
 
         {/* 🚨 IDINAGDAG NATIN ANG SCAN QR BUTTON DITO */}
         <div className="grid grid-cols-2 gap-3 mt-2">
-          <Link href="/scan" className="flex items-center justify-center gap-2 py-3 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-xl font-bold hover:bg-blue-600/30 transition-all text-xs">
+          <Link href="/driver/scan" className="flex items-center justify-center gap-2 py-3 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-xl font-bold hover:bg-blue-600/30 transition-all text-xs">
             <QrCode className="w-4 h-4" /> Scan Ticket
           </Link>
           <button className="flex items-center justify-center gap-2 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700 transition-all text-xs">
