@@ -4,6 +4,7 @@ import "./globals.css";
 import { Analytics } from "@vercel/analytics/react";
 import { PwaTracker } from "@/components/PwaTracker";
 import { ToastProvider } from "@/components/Toast";
+import InstallPWA from "@/components/InstallPWA"; // 🚨 IDINAGDAG
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,6 +39,7 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ToastProvider>
           {children}
+          <InstallPWA /> {/* 🚨 ILAGAY ITO DITO */}
         </ToastProvider>
         
         <PwaTracker />
