@@ -1,3 +1,16 @@
+// lib/constants.ts
+export const FARE_RATES = {
+  jeepney: { base: 14, baseKm: 4, perKm: 2.0, name: "Traditional Jeepney" },
+  modernJeep: { base: 17, baseKm: 4, perKm: 2.4, name: "Modern Jeepney" },
+  provincialBus: { base: 12, baseKm: 5, perKm: 2.2, name: "Provincial Bus" },
+  cityBusOrdinary: { base: 15, baseKm: 5, perKm: 2.49, name: "City Bus (Ordinary)" },
+  cityBusAircon: { base: 18, baseKm: 5, perKm: 2.97, name: "City Bus (Aircon)" },
+  uvExpress: { base: 0, baseKm: 0, perKm: 2.6, name: "UV Express" },
+  motor: { base: 10, baseKm: 2, perKm: 1.5, name: "Motor (Habal-habal)" },
+  tricycle: { base: 15, baseKm: 2, perKm: 3.0, name: "Tricycle" },
+} as const;
+
+// 🚨 DAVAO DEL SUR SHEDS (May mga bago)
 export const SHEDS = [
   { id: "digos", name: "Digos City", lat: 6.7497, lng: 125.3572 },
   { id: "stacruz", name: "Sta. Cruz", lat: 6.8342, lng: 125.4149 },
@@ -13,5 +26,59 @@ export const SHEDS = [
   { id: "kapatagan", name: "Kapatagan", lat: 6.9290, lng: 125.3415 },
   { id: "balutakay", name: "Balutakay", lat: 6.8973, lng: 125.2656 },
   { id: "sinaragan", name: "Sinaragan", lat: 6.7092, lng: 125.2178 },
-  { id: "kinuskusan", name: "Kinus-kusan", lat: 6.7667, lng: 125.1833 }, // Approx coordinates
+  { id: "kinuskusan", name: "Kinus-kusan", lat: 6.7667, lng: 125.1833 },
 ] as const;
+
+export type VehicleType = "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus";
+export type TripStatus = "Available" | "Standing" | "Full";
+
+export interface TripData {
+  tripId: string;
+  status: TripStatus;
+  location: { lat: number; lng: number };
+  seatsAvailable?: number;
+  fare?: number;
+  isOutOfService?: boolean;
+  isEmergency?: boolean;
+  isGcashEnabled?: boolean;
+  vehicleType?: VehicleType;
+  isAircon?: boolean;
+  plateNumber?: string;
+  speed?: number;
+  updatedAt: number;
+  reports?: { correct: number; wrong: number };
+  isVerified?: boolean;
+}
+
+export interface CommunityAlert {
+  id: string;
+  type: string;
+  timestamp: number;
+  expiresAt?: number;
+}
+
+// 🚨 ITO YUNG NAWALA KANINA, IBINALIK NATIN
+export interface Shed {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+export const STORAGE_KEYS = {
+  points: "biyahe_points",
+  dailyPoints: "biyahe_daily_points",
+  dailyDate: "biyahe_daily_date",
+  onboarded: "biyahe_onboarded",
+  favoriteShed: "favorite_shed",
+  userId: "biyahe_user_id",
+  lastReportTime: "biyahe_last_report_time",
+} as const;
+
+export const COOLDOWNS = {
+  communityReportMs: 10 * 60 * 1000, 
+  dailyPointCap: 50,
+  waitingPingTtlMs: 5 * 60 * 1000, 
+  alertTtlMs: 5 * 60 * 1000,
+  alarmDefaultMs: 10 * 60 * 1000,
+} as const;
