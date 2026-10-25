@@ -7,7 +7,7 @@ import { ref, set } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare
 } from "lucide-react";
 
 import { SHEDS, STORAGE_KEYS, COOLDOWNS, TripData, Shed } from "@/lib/constants";
@@ -36,6 +36,11 @@ export default function HomePage() {
   const [points, setPoints] = useState(0);
   const [showSosModal, setShowSosModal] = useState(false);
   const [showGcashModal, setShowGcashModal] = useState(false);
+  
+  // 🚨 FEEDBACK STATES
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackName, setFeedbackName] = useState("");
+  const [feedbackText, setFeedbackText] = useState("");
   
   const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
   const [isWaiting, setIsWaiting] = useState(false);
@@ -254,6 +259,24 @@ export default function HomePage() {
       if (navigator.vibrate) navigator.vibrate(50); 
       toast(`Salamat! +5 Points!`, "success");
     } catch (err) { console.error(err); }
+  };
+
+  const handleSendFeedback = async () => {
+    if (!feedbackText.trim()) return toast("Paki-type ang iyong feedback.", "error");
+    try {
+      await set(ref(database, `feedbacks/${Date.now()}`), {
+        name: feedbackName || "Anonymous",
+        feedback: feedbackText,
+        timestamp: Date.now(),
+        userId: userId || "unknown",
+      });
+      toast("Salamat! Natanggap na namin ang iyong feedback.", "success");
+      setShowFeedbackModal(false);
+      setFeedbackName("");
+      setFeedbackText("");
+    } catch (err) {
+      toast("Error sa pag-send. Subukan muli.", "error");
+    }
   };
 
   const handleClearAlert = async () => { 
@@ -506,15 +529,69 @@ export default function HomePage() {
       </main>
 
       <footer className="text-center text-xs text-slate-500 my-8 pb-16 flex flex-col items-center gap-4">
-        <button 
-          onClick={() => setShowGcashModal(true)}
-          className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-4 py-2 rounded-full font-bold hover:bg-amber-500/20 transition-all"
-        >
-          <Coffee className="w-4 h-4" /> Support Biyahe Live
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => setShowFeedbackModal(true)}
+            className="flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 px-4 py-2 rounded-full font-bold hover:bg-slate-700 transition-all"
+          >
+            <MessageSquare className="w-4 h-4" /> Send Feedback
+          </button>
+          
+          <button 
+            onClick={() => setShowGcashModal(true)}
+            className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-4 py-2 rounded-full font-bold hover:bg-amber-500/20 transition-all"
+          >
+            <Coffee className="w-4 h-4" /> Support
+          </button>
+        </div>
         <p>Biyahe Live © 2026 · Developed by Ray Mar Olandria</p>
         <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline transition-colors">Privacy Policy & Terms of Service</Link>
       </footer>
+
+      {/* 💡 SEND FEEDBACK MODAL */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-amber-400" /> Send Feedback
+              </h2>
+              <button onClick={() => setShowFeedbackModal(false)} className="p-1 text-slate-400 hover:text-white transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <p className="text-xs text-slate-400 mb-4">May gusto ka bang ipadagdag o i-improve? I-type lang sa ibaba!</p>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-300 mb-1 block">Pangalan / Driver Name (Optional)</label>
+                <input 
+                  type="text" 
+                  value={feedbackName}
+                  onChange={(e) => setFeedbackName(e.target.value)}
+                  placeholder="e.g. Manong Boy"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-300 mb-1 block">Iyong Suhestiyon *</label>
+                <textarea 
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  placeholder="Halimbawa: Pwede po bang lagyan ng QR code ang resibo..."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 h-24 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowFeedbackModal(false)} className="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">Cancel</button>
+              <button onClick={handleSendFeedback} className="flex-1 py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm hover:bg-emerald-400 transition-all">Send</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ☕ GCASH SUPPORT MODAL */}
       {showGcashModal && (
