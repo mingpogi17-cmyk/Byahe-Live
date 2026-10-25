@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useUserId } from "@/lib/useUserId";
 import { useToast } from "@/components/Toast";
+import { getDistance } from "@/lib/geo";
 
 export default function DriverDashboard() {
   const userId = useUserId();
@@ -17,6 +18,7 @@ export default function DriverDashboard() {
 
   // STATES
   const [isTripActive, setIsTripActive] = useState(false);
+  const [isMounted, setIsMounted] = useState(false); // 🚨 Bago: Para hindi mag-flash ang UI
   const [vehicleType, setVehicleType] = useState<"Van" | "Bus" | "MiniBus" | "Taxi" | "Tricycle" | "Motor">("Van");
   const [isAircon, setIsAircon] = useState(true);
   const [seats, setSeats] = useState(14);
@@ -32,18 +34,35 @@ export default function DriverDashboard() {
   // GPS Ref
   const watchIdRef = useRef<number | null>(null);
   const prevWaitingCountRef = useRef(0);
+  const driverLocRef = useRef<{lat: number, lng: number} | null>(null);
 
-  // 🚨 IDINAGDAG NATIN ANG MINIBUS AT MOTOR
-  const maxSeatsMap = { 
-    Van: 14, 
-    Bus: 49, 
-    MiniBus: 30, 
-    Taxi: 4, 
-    Tricycle: 6, 
-    Motor: 1 
-  };
+  // Dynamic Seats logic
+  const maxSeatsMap = { Van: 14, Bus: 49, MiniBus: 30, Taxi: 4, Tricycle: 6, Motor: 1 };
 
-  // 1. WAITING PINGS (Cross-device compatible)
+  // 🚨 1. LOCAL STORAGE PERSISTENCE (Para hindi mawala ang Trip)
+  useEffect(() => {
+    const savedTrip = localStorage.getItem("biyahe_trip_active");
+    if (savedTrip === "true") {
+      setIsTripActive(true);
+    }
+    setIsMounted(true);
+  }, []);
+
+  // 2. GLOBAL GPS TRACKER PARA SA ALERTS
+  useEffect(() => {
+    if (navigator.geolocation) {
+      const id = navigator.geolocation.watchPosition(
+        (pos) => {
+          driverLocRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        },
+        (err) => console.log("GPS Error (Alerts will still work):", err),
+        { enableHighAccuracy: true }
+      );
+      return () => navigator.geolocation.clearWatch(id);
+    }
+  }, []);
+
+  // 3. WAITING PINGS (May Audio at Distance Filter)
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
     const unsub = onValue(waitingRef, (snapshot) => {
@@ -54,8 +73,16 @@ export default function DriverDashboard() {
 
         Object.values(data).forEach((val: any) => {
           if (!val.expiresAt || Date.now() < val.expiresAt) {
-            counts[val.shed] = (counts[val.shed] || 0) + 1;
-            total++;
+            if (!driverLocRef.current) {
+              counts[val.shed] = (counts[val.shed] || 0) + 1;
+              total++;
+            } else {
+              const dist = getDistance(driverLocRef.current.lat, driverLocRef.current.lng, val.lat || 6.7497, val.lng || 125.3572);
+              if (dist <= 15) { // 15km radius
+                counts[val.shed] = (counts[val.shed] || 0) + 1;
+                total++;
+              }
+            }
           }
         });
 
@@ -64,7 +91,7 @@ export default function DriverDashboard() {
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
           toast("May bagong commuter na naghihintay!", "info");
         }
-
+        
         prevWaitingCountRef.current = total;
         setWaitingByShed(counts);
         setWaitingCount(total);
@@ -77,15 +104,18 @@ export default function DriverDashboard() {
     return () => unsub();
   }, [toast]);
 
-  // 2. STOP REQUEST (Bababa Ako)
+  // 4. STOP REQUEST (Bababa Ako)
   useEffect(() => {
     const stopRef = ref(database, "stop_request");
     const unsub = onValue(stopRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const hasRecentRequest = Object.values(data).some((req: any) => 
-          Date.now() - req.timestamp < 60000 
-        );
+        const hasRecentRequest = Object.values(data).some((req: any) => {
+          if (Date.now() - req.timestamp > 60000) return false;
+          if (!driverLocRef.current) return true;
+          const dist = getDistance(driverLocRef.current.lat, driverLocRef.current.lng, req.lat || 6.7497, req.lng || 125.3572);
+          return dist <= 15;
+        });
 
         if (hasRecentRequest) {
           try { new Audio('/notification.mp3').play().catch(()=>{}); } catch(e) {}
@@ -98,7 +128,7 @@ export default function DriverDashboard() {
     return () => unsub();
   }, []);
 
-  // 3. SOS ALERT
+  // 5. SOS ALERT
   useEffect(() => {
     const sosRef = ref(database, "sos_alert");
     const unsub = onValue(sosRef, (snapshot) => {
@@ -117,7 +147,7 @@ export default function DriverDashboard() {
     return () => unsub();
   }, []);
 
-  // 4. LIVE GPS TRACKING PARA SA LIVE_TRIPS
+  // 6. LIVE GPS TRACKING (Kapag naka-Start Trip)
   useEffect(() => {
     if (isTripActive && userId) {
       if (navigator.geolocation) {
@@ -156,12 +186,14 @@ export default function DriverDashboard() {
 
   const handleStartTrip = () => {
     setIsTripActive(true);
+    localStorage.setItem("biyahe_trip_active", "true"); // 🚨 I-save sa phone
     toast("Biyahe Started! Ingat sa byahe.", "success");
     try { new Audio('/notification.mp3').play().catch(()=>{}); } catch(e) {}
   };
 
   const handleEndTrip = () => {
     setIsTripActive(false);
+    localStorage.setItem("biyahe_trip_active", "false"); // 🚨 I-save sa phone
     toast("Biyahe Ended. Salamat!", "info");
   };
 
@@ -237,7 +269,6 @@ export default function DriverDashboard() {
           </div>
         )}
 
-        {/* 🚨 PINALAKI NATIN ANG GRID PARA KASYA ANG 6 NA SASAKYAN */}
         <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
           {["Van", "Bus", "MiniBus", "Taxi", "Tricycle", "Motor"].map((v) => (
             <button 
@@ -276,7 +307,6 @@ export default function DriverDashboard() {
           <button onClick={() => setSeats(seats + 1)} className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl font-black text-slate-300 hover:bg-slate-700">+</button>
         </div>
 
-        {/* 🚨 IDINAGDAG NATIN ANG SCAN QR BUTTON DITO */}
         <div className="grid grid-cols-2 gap-3 mt-2">
           <Link href="/driver/scan" className="flex items-center justify-center gap-2 py-3 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-xl font-bold hover:bg-blue-600/30 transition-all text-xs">
             <QrCode className="w-4 h-4" /> Scan Ticket
@@ -286,7 +316,10 @@ export default function DriverDashboard() {
           </button>
         </div>
 
-        {!isTripActive ? (
+        {/* 🚨 PINALITAN NATIN ITO PARA MAYA-OS ANG FLASHING */}
+        {!isMounted ? (
+          <div className="w-full py-5 bg-slate-800 rounded-2xl mt-4 animate-pulse"></div>
+        ) : !isTripActive ? (
           <button onClick={handleStartTrip} className="w-full py-5 bg-emerald-500 text-slate-950 font-black text-lg rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 mt-4">
             <Play className="w-6 h-6" /> START TRIP
           </button>

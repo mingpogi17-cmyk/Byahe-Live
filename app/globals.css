@@ -44,4 +44,7 @@ html:not(.dark) .mesh-bg {
 html:not(.dark) .glass-panel {
   background: rgba(255, 255, 255, 0.9);
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}/* 🚨 Disable pull-to-refresh sa mobile */
+html, body {
+  overscroll-behavior-y: none;
 }
