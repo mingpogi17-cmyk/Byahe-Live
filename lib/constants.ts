@@ -13,7 +13,7 @@ export const FARE_RATES = {
 // 🚨 DAVAO DEL SUR SHEDS (May mga bago)
 export const SHEDS = [
   { id: "digos", name: "Digos City", lat: 6.7497, lng: 125.3572 },
-  { id: "stacruz", name: "Sta. Cruz", lat: 6.8342, lng: 125.4149 },
+  { id: "sta.cruz", name: "Sta. Cruz", lat: 6.8342, lng: 125.4149 },
   { id: "bansalan", name: "Bansalan", lat: 6.78611, lng: 125.21333 },
   { id: "hagonoy", name: "Hagonoy", lat: 6.6892, lng: 125.3256 },
   { id: "magsaysay", name: "Magsaysay", lat: 6.7667, lng: 125.1833 },
@@ -26,7 +26,7 @@ export const SHEDS = [
   { id: "kapatagan", name: "Kapatagan", lat: 6.9290, lng: 125.3415 },
   { id: "balutakay", name: "Balutakay", lat: 6.8973, lng: 125.2656 },
   { id: "sinaragan", name: "Sinaragan", lat: 6.7092, lng: 125.2178 },
-  { id: "kinuskusan", name: "Kinus-kusan", lat: 6.7667, lng: 125.1833 },
+  { id: "kinuskusan", name: "Kinuskusan", lat: 6.7667, lng: 125.1833 },
 ] as const;
 
 export type VehicleType = "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus";
