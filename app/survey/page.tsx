@@ -7,6 +7,7 @@ import { CheckCircle2, Bus, Users, Star, Send } from "lucide-react";
 import Link from "next/link";
 
 export default function SurveyPage() {
+  const [surveyType, setSurveyType] = useState<"pre" | "post">("pre"); // Default ay Pre
   const [role, setRole] = useState<"driver" | "commuter" | null>(null);
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState("");
@@ -18,8 +19,8 @@ export default function SurveyPage() {
     setIsSubmitting(true);
 
     try {
-      // I-save sa Firebase sa ilalim ng "survey_responses"
       await push(ref(database, "survey_responses"), {
+        surveyType, // 🚨 Naka-save kung Pre o Post ito
         role,
         rating,
         feedback,
@@ -51,9 +52,25 @@ export default function SurveyPage() {
     <div className="min-h-screen bg-slate-950 text-white p-6 flex flex-col items-center justify-center">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
         
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <h1 className="text-2xl font-black mb-2 text-emerald-400">Biyahe Live Survey</h1>
-          <p className="text-xs text-slate-400">Maikling survey para sa pagpapabuti ng serbisyo. (30 seconds lang po ito).</p>
+          <p className="text-xs text-slate-400">Maikling survey para sa pagpapabuti ng serbisyo.</p>
+        </div>
+
+        {/* 🚨 PRE / POST TOGGLE */}
+        <div className="flex bg-slate-950 p-1 rounded-xl mb-6 border border-slate-800">
+          <button 
+            onClick={() => setSurveyType("pre")} 
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${surveyType === "pre" ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            Bago Gamitin (Pre)
+          </button>
+          <button 
+            onClick={() => setSurveyType("post")} 
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${surveyType === "post" ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            Pagkatapos (Post)
+          </button>
         </div>
 
         {/* QUESTION 1: ROLE */}
@@ -75,9 +92,14 @@ export default function SurveyPage() {
           </div>
         </div>
 
-        {/* QUESTION 2: RATING */}
+        {/* QUESTION 2: RATING (Dynamic base sa Pre/Post) */}
         <div className="mb-6">
-          <p className="text-sm font-bold mb-3 flex items-center gap-2"><Star className="w-4 h-4" /> Gaano ka-kapaki-pakinabang ang app?</p>
+          <p className="text-sm font-bold mb-3 flex items-center gap-2">
+            <Star className="w-4 h-4" /> 
+            {surveyType === "pre" 
+              ? "Gaano kahirap maghintay ng sasakyan ngayon?" 
+              : "Gaano ka-kapaki-pakinabang ang app?"}
+          </p>
           <div className="flex gap-2 justify-between">
             {[1, 2, 3, 4, 5].map((star) => (
               <button 
@@ -93,11 +115,13 @@ export default function SurveyPage() {
 
         {/* QUESTION 3: FEEDBACK */}
         <div className="mb-6">
-          <p className="text-sm font-bold mb-3">Anong pwede naming i-improve? (Optional)</p>
+          <p className="text-sm font-bold mb-3">
+            {surveyType === "pre" ? "Ano ang madalas na problema niyo sa terminal?" : "Anong pwede naming i-improve?"} (Optional)
+          </p>
           <textarea 
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="Halimbawa: Malabo yung tunog, o kulang ang ruta..."
+            placeholder={surveyType === "pre" ? "Halimbawa: Sobrang tagal ng pila, walang upuan..." : "Halimbawa: Malabo yung tunog, o kulang ang ruta..."}
             className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 h-24 resize-none"
           />
         </div>
