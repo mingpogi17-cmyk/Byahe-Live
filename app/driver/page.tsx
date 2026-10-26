@@ -24,6 +24,8 @@ export default function DriverDashboard() {
   const [seats, setSeats] = useState(14);
   const [earnings, setEarnings] = useState(0);
   const [fare, setFare] = useState(15);
+  const [dailyEarnings, setDailyEarnings] = useState(0);
+  const [dailyPassengers, setDailyPassengers] = useState(0);
   
   // ALERTS STATE
   const [waitingCount, setWaitingCount] = useState(0);
@@ -45,8 +47,16 @@ export default function DriverDashboard() {
     if (savedTrip === "true") {
       setIsTripActive(true);
     }
+    const savedDailyEarnings = parseFloat(localStorage.getItem("biyahe_daily_earnings") || "0");
+    const savedDailyPassengers = parseInt(localStorage.getItem("biyahe_daily_passengers") || "0");
+    setDailyEarnings(savedDailyEarnings);
+    setDailyPassengers(savedDailyPassengers);
     setIsMounted(true);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("biyahe_current_fare", fare.toString());
+  }, [fare]);
 
   // 2. GLOBAL GPS TRACKER PARA SA ALERTS
   useEffect(() => {
@@ -296,6 +306,26 @@ export default function DriverDashboard() {
               ❄️
             </button>
           </div>
+        </div>
+
+        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-300">
+              Today's Summary: <span className="text-emerald-400 font-black">₱{dailyEarnings}</span> <span className="text-slate-600">|</span> <span className="text-amber-400 font-black">{dailyPassengers}</span> Passengers
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setDailyEarnings(0);
+              setDailyPassengers(0);
+              localStorage.removeItem("biyahe_daily_earnings");
+              localStorage.removeItem("biyahe_daily_passengers");
+              toast("Summary reset!", "info");
+            }}
+            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg transition"
+          >
+            Reset
+          </button>
         </div>
 
         <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
