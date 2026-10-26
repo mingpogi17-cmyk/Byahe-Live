@@ -15,97 +15,112 @@ export default function ScanPage() {
   const [ticketDetails, setTicketDetails] = useState<{ passengers: number; earnings: number } | null>(null);
 
   useEffect(() => {
-    // I-load ang scanner library dynamically (client-side only)
-    let scanner: any;
+    let html5QrcodeScanner: any;
 
     const initScanner = async () => {
-      const { Html5QrcodeScanner } = await import("html5-qrcode");
-      
-      scanner = new Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        /* verbose= */ false
-      );
+      const { Html5Qrcode } = await import("html5-qrcode");
+      html5QrcodeScanner = new Html5Qrcode("reader");
 
-      scanner.render(
-        async (decodedText: string) => {
-          // 🚨 PAGKA-SCAN, I-STOP ANG CAMERA AT IPAKITA ANG RESULT
-          setScanResult(decodedText);
-          scanner.clear();
-          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-
-          // Extract ticketId
-          let ticketId = decodedText;
-          try {
-            const parsed = JSON.parse(decodedText);
-            if (parsed.id) ticketId = parsed.id;
-            else if (parsed.ticketId) ticketId = parsed.ticketId;
-          } catch (e) {
-            ticketId = decodedText;
+      const onScanSuccess = async (decodedText: string) => {
+        setScanResult(decodedText);
+        try {
+          if (html5QrcodeScanner.isScanning) {
+            await html5QrcodeScanner.stop();
           }
-
-          try {
-            const ticketRef = ref(database, `tickets/${ticketId}`);
-            const snapshot = await get(ticketRef);
-
-            if (!snapshot.exists()) {
-              setIsValid(false);
-              setErrorMessage("Hindi mahanap ang ticket sa database.");
-              toast("Invalid Ticket: Ticket not found", "error");
-              return;
-            }
-
-            const ticketData = snapshot.val();
-
-            if (ticketData.status === "used") {
-              setIsValid(false);
-              setErrorMessage("Nagamit na ang ticket na ito.");
-              toast("Invalid Ticket: Already used", "error");
-              return;
-            }
-
-            if (ticketData.status === "expired") {
-              setIsValid(false);
-              setErrorMessage("Expired na ang ticket na ito.");
-              toast("Invalid Ticket: Expired", "error");
-              return;
-            }
-
-            // Mark as used in Firebase
-            await update(ticketRef, { status: "used", usedAt: Date.now() });
-
-            // ONLY AFTER successful Firebase update:
-            const passengerCount = ticketData.passengers || 1;
-            const currentFare = parseFloat(localStorage.getItem("biyahe_current_fare") || "15");
-            const earnedAmount = currentFare * passengerCount;
-
-            const prevEarnings = parseFloat(localStorage.getItem("biyahe_daily_earnings") || "0");
-            const prevPassengers = parseInt(localStorage.getItem("biyahe_daily_passengers") || "0");
-            localStorage.setItem("biyahe_daily_earnings", (prevEarnings + earnedAmount).toString());
-            localStorage.setItem("biyahe_daily_passengers", (prevPassengers + passengerCount).toString());
-
-            setIsValid(true);
-            setTicketDetails({ passengers: passengerCount, earnings: earnedAmount });
-            toast(`Ticket valid for ${passengerCount} passengers. +₱${earnedAmount} earnings!`, "success");
-
-          } catch (err) {
-            console.error("Firebase error during scan:", err);
-            setIsValid(false);
-            setErrorMessage("Nagkaroon ng error sa pag-validate ng ticket.");
-            toast("Error validating ticket", "error");
-          }
-        },
-        (error: any) => {
-          // Huwag pansinin ang bawat failed scan (normal lang yun habang naghahanap)
+        } catch (e) {
+          console.error("Failed to stop scanner", e);
         }
-      );
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+        // Extract ticketId
+        let ticketId = decodedText;
+        try {
+          const parsed = JSON.parse(decodedText);
+          if (parsed.id) ticketId = parsed.id;
+          else if (parsed.ticketId) ticketId = parsed.ticketId;
+        } catch (e) {
+          ticketId = decodedText;
+        }
+
+        try {
+          const ticketRef = ref(database, `tickets/${ticketId}`);
+          const snapshot = await get(ticketRef);
+
+          if (!snapshot.exists()) {
+            setIsValid(false);
+            setErrorMessage("Hindi mahanap ang ticket sa database.");
+            toast("Invalid Ticket: Ticket not found", "error");
+            return;
+          }
+
+          const ticketData = snapshot.val();
+
+          if (ticketData.status === "used") {
+            setIsValid(false);
+            setErrorMessage("Nagamit na ang ticket na ito.");
+            toast("Invalid Ticket: Already used", "error");
+            return;
+          }
+
+          if (ticketData.status === "expired") {
+            setIsValid(false);
+            setErrorMessage("Expired na ang ticket na ito.");
+            toast("Invalid Ticket: Expired", "error");
+            return;
+          }
+
+          // Mark as used in Firebase
+          await update(ticketRef, { status: "used", usedAt: Date.now() });
+
+          // ONLY AFTER successful Firebase update:
+          const passengerCount = ticketData.passengers || 1;
+          const currentFare = parseFloat(localStorage.getItem("biyahe_current_fare") || "15");
+          const earnedAmount = currentFare * passengerCount;
+
+          const prevEarnings = parseFloat(localStorage.getItem("biyahe_daily_earnings") || "0");
+          const prevPassengers = parseInt(localStorage.getItem("biyahe_daily_passengers") || "0");
+          localStorage.setItem("biyahe_daily_earnings", (prevEarnings + earnedAmount).toString());
+          localStorage.setItem("biyahe_daily_passengers", (prevPassengers + passengerCount).toString());
+
+          setIsValid(true);
+          setTicketDetails({ passengers: passengerCount, earnings: earnedAmount });
+          toast(`Ticket valid for ${passengerCount} passengers. +₱${earnedAmount} earnings!`, "success");
+
+        } catch (err) {
+          console.error("Firebase error during scan:", err);
+          setIsValid(false);
+          setErrorMessage("Nagkaroon ng error sa pag-validate ng ticket.");
+          toast("Error validating ticket", "error");
+        }
+      };
+
+      const onScanError = (errorMessage: any) => {
+        // Ignore frame scan errors
+      };
+
+      try {
+        await html5QrcodeScanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 250 },
+          onScanSuccess,
+          onScanError
+        );
+      } catch (err) {
+        console.error("Unable to start scanner", err);
+      }
     };
 
     initScanner();
 
     return () => {
-      if (scanner) {
-        scanner.clear().catch((err: any) => console.error("Failed to clear scanner", err));
+      if (html5QrcodeScanner) {
+        try {
+          if (html5QrcodeScanner.isScanning) {
+            html5QrcodeScanner.stop().catch((err: any) => console.error("Failed to stop scanner", err));
+          }
+        } catch (e) {
+          console.error("Error stopping scanner in cleanup", e);
+        }
       }
     };
   }, [toast]);

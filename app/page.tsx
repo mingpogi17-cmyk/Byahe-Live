@@ -445,6 +445,7 @@ export default function HomePage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-1 rounded-full text-xs font-bold"><Award className="w-3.5 h-3.5" /> {points} pts</div>
+          <Link href="/commuter/ticket" className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-emerald-500 hover:text-white transition-all">Ticket</Link>
           <Link href="/driver" className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-slate-700 transition-all"><Navigation className="w-3.5 h-3.5" /> Driver</Link>
         </div>
       </header>
