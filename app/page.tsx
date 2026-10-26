@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { database } from "@/lib/firebase";
-import { ref, set } from "firebase/database";
+import { ref, set, push } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
@@ -64,6 +64,79 @@ export default function HomePage() {
   const [sleepAlarmActive, setSleepAlarmActive] = useState(false);
   const [sleepAlarmDistance, setSleepAlarmDistance] = useState<number>(1);
   const [commuterLocation, setCommuterLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [showStandbyEmergencyModal, setShowStandbyEmergencyModal] = useState(false);
+
+  // 🚨 SHAKE TO SOS LOGIC (3 rapid shakes in 1.5 seconds)
+  useEffect(() => {
+    let shakeTimes: number[] = [];
+    const SHAKE_THRESHOLD = 20;
+
+    const triggerSilentSOS = async () => {
+      try {
+        let hasAudio = false;
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            hasAudio = true;
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+            setTimeout(() => {
+              if (mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+                stream.getTracks().forEach((track) => track.stop());
+              }
+            }, 15000);
+          } catch (e) {
+            console.log("Audio recording permission denied or error:", e);
+          }
+        }
+
+        await push(ref(database, "sos_alert"), {
+          id: "sos_" + Date.now(),
+          type: "harassment",
+          userId: userId || "anonymous",
+          lat: commuterLocation?.lat || selectedShed.lat,
+          lng: commuterLocation?.lng || selectedShed.lng,
+          shed: selectedShed.name,
+          hasAudio,
+          timestamp: Date.now()
+        });
+
+        toast("Safety ping sent.", "info");
+      } catch (err) {
+        console.error("Error triggering silent SOS:", err);
+      }
+    };
+
+    const handleMotion = (event: DeviceMotionEvent) => {
+      const acc = event.accelerationIncludingGravity;
+      if (!acc) return;
+      const x = acc.x || 0;
+      const y = acc.y || 0;
+      const z = acc.z || 0;
+      const totalAcc = Math.sqrt(x * x + y * y + z * z);
+
+      if (totalAcc > SHAKE_THRESHOLD) {
+        const now = Date.now();
+        shakeTimes = shakeTimes.filter((t) => now - t <= 1500);
+        shakeTimes.push(now);
+
+        if (shakeTimes.length >= 3) {
+          shakeTimes = [];
+          triggerSilentSOS();
+        }
+      }
+    };
+
+    if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
+      window.addEventListener("devicemotion", handleMotion);
+    }
+    return () => {
+      if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
+        window.removeEventListener("devicemotion", handleMotion);
+      }
+    };
+  }, [commuterLocation, selectedShed, userId, toast]);
 
   useEffect(() => {
     const savedPoints = localStorage.getItem(STORAGE_KEYS.points);
@@ -336,13 +409,22 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 flex flex-col items-center relative">
       
-      {/* 🚨 SOS FLOATING BUTTON */}
-      <button 
-        onClick={() => setShowSosModal(true)} 
-        className="fixed bottom-24 right-6 z-50 p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse"
-      >
-        <Siren className="w-8 h-8" />
-      </button>
+      {/* 🚨 EMERGENCY & SOS FLOATING BUTTONS */}
+      <div className="fixed bottom-24 right-6 z-50 flex items-center gap-2">
+        <button
+          onClick={() => setShowStandbyEmergencyModal(true)}
+          className="p-3 bg-slate-800 hover:bg-slate-700 text-rose-400 border border-rose-500/50 rounded-full shadow-2xl transition-all flex items-center gap-1.5 font-bold text-xs"
+        >
+          <ShieldCheck className="w-5 h-5 text-rose-500" />
+          <span>Emergency</span>
+        </button>
+        <button
+          onClick={() => setShowSosModal(true)}
+          className="p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse"
+        >
+          <Siren className="w-8 h-8" />
+        </button>
+      </div>
 
       {activeAlert && (
         <div className={`fixed top-4 z-50 w-full max-w-md px-4 py-3 rounded-xl border shadow-lg flex items-center justify-between animate-in slide-in-from-top-2 ${alertStyles(activeAlert.type)}`}>
@@ -662,6 +744,87 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* 🚨 STANDBY EMERGENCY MODAL */}
+      {showStandbyEmergencyModal && (() => {
+        let nearestShed = selectedShed;
+        if (commuterLocation) {
+          let minDist = Infinity;
+          SHEDS.forEach((s) => {
+            const d = getDistance(commuterLocation.lat, commuterLocation.lng, s.lat, s.lng);
+            if (d < minDist) {
+              minDist = d;
+              nearestShed = s;
+            }
+          });
+        }
+
+        const lat = commuterLocation?.lat || selectedShed.lat;
+        const lng = commuterLocation?.lng || selectedShed.lng;
+        const smsUrl = `sms:?body=${encodeURIComponent(`Emergency! I am at lat: ${lat}, lng: ${lng}`)}`;
+
+        return (
+          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <ShieldCheck className="w-6 h-6 text-rose-500" /> Emergency Hotlines
+                </h2>
+                <button onClick={() => setShowStandbyEmergencyModal(false)} className="p-1 text-slate-400 hover:text-white transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 mb-4">Nearest Area: <span className="font-bold text-emerald-400">{nearestShed.name}</span></p>
+
+              {emergencyData ? (
+                <div className="space-y-3">
+                  <a href={`tel:${emergencyData.pnp}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-950 text-blue-400 rounded-lg"><ShieldCheck className="w-4 h-4" /></div>
+                      <div>
+                        <p className="font-bold text-white text-xs">PNP {nearestShed.name}</p>
+                        <p className="text-[10px] text-slate-400">{emergencyData.pnp}</p>
+                      </div>
+                    </div>
+                    <Phone className="w-4 h-4 text-emerald-400" />
+                  </a>
+                  <a href={`tel:${emergencyData.bfp}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-rose-950 text-rose-400 rounded-lg"><Flame className="w-4 h-4" /></div>
+                      <div>
+                        <p className="font-bold text-white text-xs">BFP {nearestShed.name}</p>
+                        <p className="text-[10px] text-slate-400">{emergencyData.bfp}</p>
+                      </div>
+                    </div>
+                    <Phone className="w-4 h-4 text-emerald-400" />
+                  </a>
+                  <a href={`tel:${emergencyData.rescue}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-emerald-950 text-emerald-400 rounded-lg"><HeartPulse className="w-4 h-4" /></div>
+                      <div>
+                        <p className="font-bold text-white text-xs">MDRRMO {nearestShed.name}</p>
+                        <p className="text-[10px] text-slate-400">{emergencyData.rescue}</p>
+                      </div>
+                    </div>
+                    <Phone className="w-4 h-4 text-emerald-400" />
+                  </a>
+                </div>
+              ) : (
+                <p className="text-center text-slate-400 py-4 text-xs">Kinakarga ang emergency contacts...</p>
+              )}
+
+              <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
+                <a href={smsUrl} className="flex items-center justify-center w-full py-3 bg-emerald-600 text-slate-950 font-black rounded-xl text-xs hover:bg-emerald-500 transition-all gap-2">
+                  <Share2 className="w-4 h-4" /> Share Location via SMS
+                </a>
+                <a href="tel:911" className="flex items-center justify-center w-full py-3 bg-rose-600 text-white font-black rounded-xl text-xs hover:bg-rose-500 transition-all gap-2">
+                  <Siren className="w-4 h-4" /> CALL 911 (National)
+                </a>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 🚨 SOS MODAL (PNP, BFP, RESCUE) */}
       {showSosModal && (
