@@ -49,6 +49,7 @@ export default function HomePage() {
   const [vehicleFilter, setVehicleFilter] = useState<"All" | "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus">("All");
   const [comfortFilter, setComfortFilter] = useState<"All" | "Aircon" | "Non-Aircon">("All");
   const [emergencyData, setEmergencyData] = useState<any>(null);
+  const [allEmergencyData, setAllEmergencyData] = useState<any>(null);
   
   const [lastReportTime, setLastReportTime] = useState(0);
   const [dailyPoints, setDailyPoints] = useState(0);
@@ -194,6 +195,7 @@ export default function HomePage() {
 
   useEffect(() => {
     fetch("/emergency-directory.json").then(res => res.json()).then(data => {
+      setAllEmergencyData(data);
       const shedKey = Object.keys(data).find(key => selectedShed.name.includes(key));
       setEmergencyData(data[shedKey || "Default"]);
     }).catch(err => console.error("Emergency fetch error:", err));
@@ -759,6 +761,10 @@ export default function HomePage() {
           });
         }
 
+        const currentEmergencyData = allEmergencyData
+          ? (allEmergencyData[nearestShed.name] || allEmergencyData["Default"])
+          : null;
+
         const lat = commuterLocation?.lat || selectedShed.lat;
         const lng = commuterLocation?.lng || selectedShed.lng;
         const smsUrl = `sms:?body=${encodeURIComponent(`Emergency! I am at lat: ${lat}, lng: ${lng}`)}`;
@@ -776,34 +782,34 @@ export default function HomePage() {
               </div>
               <p className="text-xs text-slate-400 mb-4">Nearest Area: <span className="font-bold text-emerald-400">{nearestShed.name}</span></p>
 
-              {emergencyData ? (
+              {currentEmergencyData ? (
                 <div className="space-y-3">
-                  <a href={`tel:${emergencyData.pnp}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
+                  <a href={`tel:${currentEmergencyData.pnp}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-blue-950 text-blue-400 rounded-lg"><ShieldCheck className="w-4 h-4" /></div>
                       <div>
                         <p className="font-bold text-white text-xs">PNP {nearestShed.name}</p>
-                        <p className="text-[10px] text-slate-400">{emergencyData.pnp}</p>
+                        <p className="text-[10px] text-slate-400">{currentEmergencyData.pnp}</p>
                       </div>
                     </div>
                     <Phone className="w-4 h-4 text-emerald-400" />
                   </a>
-                  <a href={`tel:${emergencyData.bfp}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
+                  <a href={`tel:${currentEmergencyData.bfp}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-rose-950 text-rose-400 rounded-lg"><Flame className="w-4 h-4" /></div>
                       <div>
                         <p className="font-bold text-white text-xs">BFP {nearestShed.name}</p>
-                        <p className="text-[10px] text-slate-400">{emergencyData.bfp}</p>
+                        <p className="text-[10px] text-slate-400">{currentEmergencyData.bfp}</p>
                       </div>
                     </div>
                     <Phone className="w-4 h-4 text-emerald-400" />
                   </a>
-                  <a href={`tel:${emergencyData.rescue}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
+                  <a href={`tel:${currentEmergencyData.rescue}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-emerald-950 text-emerald-400 rounded-lg"><HeartPulse className="w-4 h-4" /></div>
                       <div>
                         <p className="font-bold text-white text-xs">MDRRMO {nearestShed.name}</p>
-                        <p className="text-[10px] text-slate-400">{emergencyData.rescue}</p>
+                        <p className="text-[10px] text-slate-400">{currentEmergencyData.rescue}</p>
                       </div>
                     </div>
                     <Phone className="w-4 h-4 text-emerald-400" />
