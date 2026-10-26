@@ -28,7 +28,24 @@ export default function ScanPage() {
           setScanResult(decodedText);
           scanner.clear();
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-          toast("Ticket Scanned Successfully!", "success");
+
+          let ticketData: any = {};
+          try {
+            ticketData = JSON.parse(decodedText);
+          } catch (e) {
+            ticketData = { id: decodedText };
+          }
+
+          const passengerCount = ticketData.passengers || 1;
+          const currentFare = parseFloat(localStorage.getItem("biyahe_current_fare") || "15");
+          const earnedAmount = currentFare * passengerCount;
+
+          const prevEarnings = parseFloat(localStorage.getItem("biyahe_daily_earnings") || "0");
+          const prevPassengers = parseInt(localStorage.getItem("biyahe_daily_passengers") || "0");
+          localStorage.setItem("biyahe_daily_earnings", (prevEarnings + earnedAmount).toString());
+          localStorage.setItem("biyahe_daily_passengers", (prevPassengers + passengerCount).toString());
+
+          toast(`Ticket valid for ${passengerCount} passengers. +₱${earnedAmount} earnings!`, "success");
         },
         (error: any) => {
           // Huwag pansinin ang bawat failed scan (normal lang yun habang naghahanap)
