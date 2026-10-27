@@ -6,7 +6,7 @@ import { database } from "@/lib/firebase";
 import { ref, onValue, set, remove } from "firebase/database";
 import { 
   Navigation, Users, Settings, ShieldCheck, 
-  WifiOff, Siren, ArrowLeft, Play, Square, MapPin, QrCode
+  WifiOff, Siren, ArrowLeft, Play, Square, MapPin, QrCode, AlertTriangle
 } from "lucide-react";
 import { useUserId } from "@/lib/useUserId";
 import { useToast } from "@/components/Toast";
@@ -18,23 +18,26 @@ export default function DriverDashboard() {
 
   // STATES
   const [isTripActive, setIsTripActive] = useState(false);
-  const [isMounted, setIsMounted] = useState(false); // 🚨 Bago: Para hindi mag-flash ang UI
+  const [isMounted, setIsMounted] = useState(false);
   const [vehicleType, setVehicleType] = useState<"Van" | "Bus" | "MiniBus" | "Taxi" | "Tricycle" | "Motor">("Van");
   const [isAircon, setIsAircon] = useState(true);
   const [seats, setSeats] = useState(14);
   const [earnings, setEarnings] = useState(0);
   const [fare, setFare] = useState(15);
+  
+  // EARNINGS SUMMARY STATE
   const [dailyEarnings, setDailyEarnings] = useState(0);
   const [dailyPassengers, setDailyPassengers] = useState(0);
-  
+
   // ALERTS STATE
   const [waitingCount, setWaitingCount] = useState(0);
-  const [waitingByShed, setWaitingByShed] = useState<Record<string, number>>({});
+  const [waitingByShed, setWaitingByShed] = useState<Record<string, Record<string, number>>>({});
+  const [nearbyPassengers, setNearbyPassengers] = useState<any[]>([]);
   const [showStopAlert, setShowStopAlert] = useState(false);
   const [showSosAlert, setShowSosAlert] = useState(false);
   const [showHarassmentAlert, setShowHarassmentAlert] = useState(false);
-  
-  // GPS Ref
+
+  // GPS Refs
   const watchIdRef = useRef<number | null>(null);
   const prevWaitingCountRef = useRef(0);
   const driverLocRef = useRef<{lat: number, lng: number} | null>(null);
@@ -42,7 +45,7 @@ export default function DriverDashboard() {
   // Dynamic Seats logic
   const maxSeatsMap = { Van: 14, Bus: 49, MiniBus: 30, Taxi: 4, Tricycle: 6, Motor: 1 };
 
-  // 🚨 1. LOCAL STORAGE PERSISTENCE (Para hindi mawala ang Trip)
+  // 1. LOCAL STORAGE PERSISTENCE (Trip & Summary)
   useEffect(() => {
     const savedTrip = localStorage.getItem("biyahe_trip_active");
     if (savedTrip === "true") {
@@ -73,26 +76,36 @@ export default function DriverDashboard() {
     }
   }, []);
 
-  // 3. WAITING PINGS (May Audio at Distance Filter)
+  // 3. WAITING PINGS & ROADSIDE RADAR
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
     const unsub = onValue(waitingRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const counts: Record<string, number> = {};
+        const counts: Record<string, Record<string, number>> = {};
         let total = 0;
+        let nearbyList: any[] = [];
 
         Object.values(data).forEach((val: any) => {
           if (!val.expiresAt || Date.now() < val.expiresAt) {
-            if (!driverLocRef.current) {
-              counts[val.shed] = (counts[val.shed] || 0) + 1;
-              total++;
-            } else {
-              const dist = getDistance(driverLocRef.current.lat, driverLocRef.current.lng, val.lat || 6.7497, val.lng || 125.3572);
-              if (dist <= 15) { // 15km radius
-                counts[val.shed] = (counts[val.shed] || 0) + 1;
-                total++;
+            let isValid = true;
+            let distance = 0;
+
+            if (driverLocRef.current) {
+              distance = getDistance(driverLocRef.current.lat, driverLocRef.current.lng, val.lat || 6.7497, val.lng || 125.3572);
+              if (distance > 15) isValid = false;
+            }
+
+            if (isValid) {
+              // 🚨 Kung within 5km, isama sa nearby radar
+              if (distance > 0 && distance <= 5) {
+                nearbyList.push({ ...val, distance });
               }
+
+              if (!counts[val.shed]) counts[val.shed] = {};
+              const vType = val.vehicleType || "Any";
+              counts[val.shed][vType] = (counts[val.shed][vType] || 0) + 1;
+              total++;
             }
           }
         });
@@ -106,10 +119,12 @@ export default function DriverDashboard() {
         prevWaitingCountRef.current = total;
         setWaitingByShed(counts);
         setWaitingCount(total);
+        setNearbyPassengers(nearbyList.sort((a, b) => a.distance - b.distance));
       } else {
         prevWaitingCountRef.current = 0;
         setWaitingByShed({});
         setWaitingCount(0);
+        setNearbyPassengers([]);
       }
     });
     return () => unsub();
@@ -145,13 +160,13 @@ export default function DriverDashboard() {
     const unsub = onValue(sosRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-
-        const hasRecentHarassment = Object.values(data).some((req: any) =>
-          req.type === "harassment" && Date.now() - req.timestamp < 60000
+        
+        const hasRecentHarassment = Object.values(data).some((req: any) => 
+          req.type === "harassment" && Date.now() - req.timestamp < 60000 
         );
 
         const hasRecentSos = Object.values(data).some((req: any) => 
-          req.type !== "harassment" && Date.now() - req.timestamp < 60000
+          req.type !== "harassment" && Date.now() - req.timestamp < 60000 
         );
 
         if (hasRecentHarassment) {
@@ -170,7 +185,7 @@ export default function DriverDashboard() {
     return () => unsub();
   }, []);
 
-  // 6. LIVE GPS TRACKING (Kapag naka-Start Trip)
+  // 6. LIVE GPS TRACKING PARA SA LIVE_TRIPS
   useEffect(() => {
     if (isTripActive && userId) {
       if (navigator.geolocation) {
@@ -209,39 +224,33 @@ export default function DriverDashboard() {
 
   const handleStartTrip = () => {
     setIsTripActive(true);
-    localStorage.setItem("biyahe_trip_active", "true"); // 🚨 I-save sa phone
+    localStorage.setItem("biyahe_trip_active", "true");
     toast("Biyahe Started! Ingat sa byahe.", "success");
     try { new Audio('/notification.mp3').play().catch(()=>{}); } catch(e) {}
   };
 
   const handleEndTrip = () => {
     setIsTripActive(false);
-    localStorage.setItem("biyahe_trip_active", "false"); // 🚨 I-save sa phone
+    localStorage.setItem("biyahe_trip_active", "false");
     toast("Biyahe Ended. Salamat!", "info");
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 flex flex-col items-center relative">
       
-      {showHarassmentAlert && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[999] w-11/12 max-w-sm bg-rose-600 text-white p-4 rounded-xl shadow-2xl flex items-center justify-between animate-pulse">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="w-8 h-8 text-white shrink-0" />
-            <div>
-              <p className="font-black text-sm uppercase tracking-wider text-white">HARASSMENT ALERT</p>
-              <p className="text-xs font-bold text-rose-100">Emergency inside vehicle!</p>
-            </div>
-          </div>
-          <button onClick={() => setShowHarassmentAlert(false)} className="px-3 py-1 bg-black/20 rounded-lg hover:bg-black/40 text-xs font-bold">OK</button>
-        </div>
-      )}
-
       {showSosAlert && (
         <div className="fixed inset-0 z-[999] bg-rose-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in zoom-in">
           <Siren className="w-24 h-24 text-rose-500 animate-pulse mb-4" />
           <h1 className="text-3xl font-black text-white mb-2">EMERGENCY SOS!</h1>
           <p className="text-rose-200 mb-6 font-bold">May commuter na nangangailangan ng tulong sa area mo!</p>
           <button onClick={() => setShowSosAlert(false)} className="px-8 py-3 bg-white text-rose-900 font-black rounded-full">I-ACKNOWLEDGE</button>
+        </div>
+      )}
+
+      {showHarassmentAlert && (
+        <div className="fixed top-0 left-0 right-0 z-[999] bg-rose-600 text-white p-4 shadow-2xl animate-in slide-in-from-top flex items-center justify-center gap-2">
+           <AlertTriangle className="w-5 h-5 animate-pulse" />
+           <p className="font-bold text-sm">HARASSMENT ALERT: Emergency inside vehicle!</p>
         </div>
       )}
 
@@ -288,17 +297,42 @@ export default function DriverDashboard() {
 
       <main className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
         
+        {/* 🚨 ROADSIDE RADAR (Malapit na Pasahero) */}
+        {nearbyPassengers.length > 0 && (
+          <div className="bg-amber-950/30 border border-amber-800/50 p-3 rounded-2xl mb-2 animate-in fade-in">
+            <p className="text-[10px] text-amber-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-1">
+              <MapPin className="w-3 h-3" /> Malapit na Pasahero (Kalsada):
+            </p>
+            <div className="space-y-2">
+              {nearbyPassengers.map((p, i) => (
+                <div key={i} className="flex items-center justify-between bg-amber-900/20 px-2.5 py-1.5 rounded-lg border border-amber-700/30">
+                  <span className="text-xs font-bold text-white">{p.vehicleType || "Any"}</span>
+                  <span className="text-xs font-black text-amber-300">{(p.distance * 1000).toFixed(0)}m away</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {Object.keys(waitingByShed).length > 0 && (
           <div className="bg-emerald-950/30 border border-emerald-800/50 p-3 rounded-2xl mb-2 animate-in fade-in">
             <p className="text-[10px] text-emerald-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-1">
               <Users className="w-3 h-3" /> May Naghihintay Sa:
             </p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(waitingByShed).map(([shedName, count]) => (
-                <div key={shedName} className="flex items-center gap-1.5 bg-emerald-900/50 px-2.5 py-1 rounded-lg border border-emerald-700/50">
-                  <MapPin className="w-3 h-3 text-emerald-400" />
-                  <span className="text-xs font-bold text-white">{shedName}:</span>
-                  <span className="text-xs font-black text-emerald-300">{count}</span>
+            <div className="space-y-2">
+              {Object.entries(waitingByShed).map(([shedName, vehicles]) => (
+                <div key={shedName} className="bg-emerald-900/30 p-2 rounded-lg border border-emerald-700/30">
+                  <div className="flex items-center gap-1 mb-1">
+                    <MapPin className="w-3 h-3 text-emerald-400" />
+                    <span className="text-xs font-bold text-white">{shedName}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pl-4">
+                    {Object.entries(vehicles).map(([vType, count]) => (
+                      <span key={vType} className="text-[10px] bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded border border-slate-700">
+                        {vType}: {count}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -372,7 +406,6 @@ export default function DriverDashboard() {
           </button>
         </div>
 
-        {/* 🚨 PINALITAN NATIN ITO PARA MAYA-OS ANG FLASHING */}
         {!isMounted ? (
           <div className="w-full py-5 bg-slate-800 rounded-2xl mt-4 animate-pulse"></div>
         ) : !isTripActive ? (

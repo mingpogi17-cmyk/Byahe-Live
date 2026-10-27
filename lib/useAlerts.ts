@@ -57,12 +57,13 @@ export const useAlerts = (selectedShedName: string) => {
   }, [selectedShedName]);
 
   // 3. ACTIONS (Gagamit na ng userId para hindi mag-patungan)
-  const sendWaitingPing = useCallback(async (lat: number, lng: number) => {
+    const sendWaitingPing = useCallback(async (lat: number, lng: number, vehicleType: string = "Any", customShedName?: string) => {
     if (!userId) return;
     try {
       await set(ref(database, `waiting_commuters/${userId}`), {
         id: userId,
-        shed: selectedShedName,
+        shed: customShedName || selectedShedName, // 🚨 Gagamitin ang custom shed kung meron
+        vehicleType: vehicleType,
         timestamp: Date.now(),
         expiresAt: Date.now() + COOLDOWNS.waitingPingTtlMs,
         lat,

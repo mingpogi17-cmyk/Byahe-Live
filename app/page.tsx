@@ -48,6 +48,7 @@ export default function HomePage() {
 
   const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
   const [isWaiting, setIsWaiting] = useState(false);
+  const [waitingVehicle, setWaitingVehicle] = useState<"Van" | "Bus" | "MiniBus" | "Taxi" | "Tricycle" | "Motor">("Van"); // 🚨 IDINAGDAG DITO
   const [searchQuery, setSearchQuery] = useState("");
   const [showFareMatrix, setShowFareMatrix] = useState(false);
   const [vehicleFilter, setVehicleFilter] = useState<"All" | "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus">("All");
@@ -266,7 +267,7 @@ export default function HomePage() {
     else { localStorage.setItem(STORAGE_KEYS.favoriteShed, selectedShed.id); setIsFavorite(true); } 
   };
 
-  const handleManualWaitingPing = () => {
+    const handleManualWaitingPing = () => {
     if (isWaiting) {
       cancelWaitingPing();
       setIsWaiting(false);
@@ -274,22 +275,27 @@ export default function HomePage() {
       return;
     }
 
-    if (!commuterLocation) {
-      sendWaitingPing(selectedShed.lat, selectedShed.lng);
-      setIsWaiting(true);
-      toast("Na-notify na ang mga driver!", "success");
-      return;
-    }
+    const lat = commuterLocation?.lat || selectedShed.lat;
+    const lng = commuterLocation?.lng || selectedShed.lng;
 
-    const distanceToShed = getDistance(commuterLocation.lat, commuterLocation.lng, selectedShed.lat, selectedShed.lng);
-    if (distanceToShed > 0.05) {
-      toast(`Masyado kang malayo sa ${selectedShed.name} (${(distanceToShed).toFixed(1)} km away). Lumapit ka muna sa shed.`, "error");
-      return;
-    }
+    // 🚨 Hahanapin kung anong pinakamalapit na shed para maging reference
+    let nearestShedName = selectedShed.name;
+    let minDist = Infinity;
+    SHEDS.forEach(s => {
+      const d = getDistance(lat, lng, s.lat, s.lng);
+      if (d < minDist) {
+        minDist = d;
+        nearestShedName = s.name;
+      }
+    });
 
-    sendWaitingPing(commuterLocation.lat, commuterLocation.lng);
+    sendWaitingPing(lat, lng, waitingVehicle, nearestShedName);
     setIsWaiting(true);
-    toast("Na-notify na ang mga driver sa area!", "success");
+    toast("Na-notify na ang mga driver sa area! +0.5 Points", "success");
+    
+    const newPoints = points + 0.5; 
+    setPoints(newPoints); 
+    localStorage.setItem(STORAGE_KEYS.points, newPoints.toString());
   };
 
   const handleRequestStop = () => {
@@ -497,18 +503,35 @@ export default function HomePage() {
 
       <main className="w-full max-w-md space-y-4 pt-4">
         
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={handleManualWaitingPing} className={`py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 transition-all ${
-            isWaiting 
-              ? 'bg-amber-500/20 text-amber-400 border border-amber-800/50 hover:bg-amber-500/30' 
-              : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'
-          }`}>
-            <BellRing className={`w-6 h-6 ${isWaiting ? 'animate-pulse' : ''}`} /> 
-            {isWaiting ? "Kinansela" : "Naghihintay Ako"}
-          </button>
-          <button onClick={handleRequestStop} className="py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg">
-            <Bell className="w-6 h-6" /> Bababa Ako
-          </button>
+                <div className="space-y-2">
+          {/* 🚨 VEHICLE SELECTOR DROPDOWN */}
+          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
+            <span className="text-xs text-slate-400 flex items-center gap-1"><Bus className="w-3 h-3" /> Hinihintay ko:</span>
+            <select 
+              value={waitingVehicle} 
+              onChange={(e) => setWaitingVehicle(e.target.value as any)}
+              className="bg-slate-800 text-emerald-400 text-xs font-bold rounded-lg px-2 py-1 outline-none border border-slate-700"
+            >
+              {["Van", "Bus", "MiniBus", "Taxi", "Tricycle", "Motor"].map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 🚨 BUTTONS */}
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={handleManualWaitingPing} className={`py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 transition-all ${
+              isWaiting 
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-800/50 hover:bg-amber-500/30' 
+                : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'
+            }`}>
+              <BellRing className={`w-6 h-6 ${isWaiting ? 'animate-pulse' : ''}`} /> 
+              {isWaiting ? "Kinansela" : "Naghihintay Ako"}
+            </button>
+            <button onClick={handleRequestStop} className="py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg">
+              <Bell className="w-6 h-6" /> Bababa Ako
+            </button>
+          </div>
         </div>
 
         <button 
