@@ -331,7 +331,7 @@ export default function HomePage() {
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
-      recognition.lang = "en-US";
+      recognition.lang = "fil-PH";
 
       recognition.onstart = () => {
         setIsListening(true);
