@@ -27,8 +27,6 @@ export const SHEDS = [
   { id: "balutakay", name: "Balutakay", lat: 6.8973, lng: 125.2656 },
   { id: "sinaragan", name: "Sinaragan", lat: 6.7092, lng: 125.2178 },
   { id: "kinuskusan", name: "Kinuskusan", lat: 6.7667, lng: 125.1833 },
-  { id: "toril", name: "Toril", lat: 7.0153, lng: 125.4922 },
-  { id: "ecoland", name: "Ecoland", lat: 7.0550, lng: 125.5950 },
 ] as const;
 
 export type VehicleType = "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus";

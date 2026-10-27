@@ -3,11 +3,11 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { database } from "@/lib/firebase";
-import { ref, set, push } from "firebase/database";
+import { ref, set } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare
 } from "lucide-react";
 
 import { SHEDS, STORAGE_KEYS, COOLDOWNS, TripData, Shed } from "@/lib/constants";
@@ -42,10 +42,6 @@ export default function HomePage() {
   const [feedbackName, setFeedbackName] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
   
-  // 🚨 VOICE-TO-TEXT STATES
-  const [isListening, setIsListening] = useState(false);
-  const [reportText, setReportText] = useState("");
-
   const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
   const [isWaiting, setIsWaiting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,7 +49,6 @@ export default function HomePage() {
   const [vehicleFilter, setVehicleFilter] = useState<"All" | "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus">("All");
   const [comfortFilter, setComfortFilter] = useState<"All" | "Aircon" | "Non-Aircon">("All");
   const [emergencyData, setEmergencyData] = useState<any>(null);
-  const [allEmergencyData, setAllEmergencyData] = useState<any>(null);
   
   const [lastReportTime, setLastReportTime] = useState(0);
   const [dailyPoints, setDailyPoints] = useState(0);
@@ -69,79 +64,6 @@ export default function HomePage() {
   const [sleepAlarmActive, setSleepAlarmActive] = useState(false);
   const [sleepAlarmDistance, setSleepAlarmDistance] = useState<number>(1);
   const [commuterLocation, setCommuterLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [showStandbyEmergencyModal, setShowStandbyEmergencyModal] = useState(false);
-
-  // 🚨 SHAKE TO SOS LOGIC (3 rapid shakes in 1.5 seconds)
-  useEffect(() => {
-    let shakeTimes: number[] = [];
-    const SHAKE_THRESHOLD = 20;
-
-    const triggerSilentSOS = async () => {
-      try {
-        let hasAudio = false;
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            hasAudio = true;
-            const mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.start();
-            setTimeout(() => {
-              if (mediaRecorder.state !== "inactive") {
-                mediaRecorder.stop();
-                stream.getTracks().forEach((track) => track.stop());
-              }
-            }, 15000);
-          } catch (e) {
-            console.log("Audio recording permission denied or error:", e);
-          }
-        }
-
-        await push(ref(database, "sos_alert"), {
-          id: "sos_" + Date.now(),
-          type: "harassment",
-          userId: userId || "anonymous",
-          lat: commuterLocation?.lat || selectedShed.lat,
-          lng: commuterLocation?.lng || selectedShed.lng,
-          shed: selectedShed.name,
-          hasAudio,
-          timestamp: Date.now()
-        });
-
-        toast("Safety ping sent.", "info");
-      } catch (err) {
-        console.error("Error triggering silent SOS:", err);
-      }
-    };
-
-    const handleMotion = (event: DeviceMotionEvent) => {
-      const acc = event.accelerationIncludingGravity;
-      if (!acc) return;
-      const x = acc.x || 0;
-      const y = acc.y || 0;
-      const z = acc.z || 0;
-      const totalAcc = Math.sqrt(x * x + y * y + z * z);
-
-      if (totalAcc > SHAKE_THRESHOLD) {
-        const now = Date.now();
-        shakeTimes = shakeTimes.filter((t) => now - t <= 1500);
-        shakeTimes.push(now);
-
-        if (shakeTimes.length >= 3) {
-          shakeTimes = [];
-          triggerSilentSOS();
-        }
-      }
-    };
-
-    if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
-      window.addEventListener("devicemotion", handleMotion);
-    }
-    return () => {
-      if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
-        window.removeEventListener("devicemotion", handleMotion);
-      }
-    };
-  }, [commuterLocation, selectedShed, userId, toast]);
 
   useEffect(() => {
     const savedPoints = localStorage.getItem(STORAGE_KEYS.points);
@@ -199,7 +121,6 @@ export default function HomePage() {
 
   useEffect(() => {
     fetch("/emergency-directory.json").then(res => res.json()).then(data => {
-      setAllEmergencyData(data);
       const shedKey = Object.keys(data).find(key => selectedShed.name.includes(key));
       setEmergencyData(data[shedKey || "Default"]);
     }).catch(err => console.error("Emergency fetch error:", err));
@@ -320,45 +241,6 @@ export default function HomePage() {
     }
   };
 
-  const handleStartVoiceRecognition = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast("Voice recognition not supported on this browser.", "error");
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = "fil-PH";
-
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
-
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setReportText((prev) => (prev ? `${prev} ${transcript}` : transcript));
-        setIsListening(false);
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error("Speech recognition error:", event.error);
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognition.start();
-    } catch (err) {
-      console.error("Error starting speech recognition:", err);
-      setIsListening(false);
-    }
-  };
-
   const handleCommunityReport = async (type: string) => {
     if (Date.now() - lastReportTime < COOLDOWNS.communityReportMs) return toast("Nag-report ka na kamakailan lang.", "info");
     if (dailyPoints >= COOLDOWNS.dailyPointCap) return toast("Naabot mo na ang max points ngayong araw.", "info");
@@ -372,10 +254,8 @@ export default function HomePage() {
       localStorage.setItem(STORAGE_KEYS.points, newPoints.toString()); 
       localStorage.setItem(STORAGE_KEYS.dailyPoints, newDailyPoints.toString()); 
       localStorage.setItem(STORAGE_KEYS.lastReportTime, newTime.toString());
-      const fullReportMsg = reportText.trim() ? `${type}: ${reportText.trim()}` : type;
-      await sendCommunityReport(fullReportMsg);
+      await sendCommunityReport(type);
       setShowReportModal(false); 
-      setReportText("");
       if (navigator.vibrate) navigator.vibrate(50); 
       toast(`Salamat! +5 Points!`, "success");
     } catch (err) { console.error(err); }
@@ -456,22 +336,13 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 flex flex-col items-center relative">
       
-      {/* 🚨 EMERGENCY & SOS FLOATING BUTTONS */}
-      <div className="fixed bottom-24 right-6 z-50 flex items-center gap-2">
-        <button
-          onClick={() => setShowStandbyEmergencyModal(true)}
-          className="p-3 bg-slate-800 hover:bg-slate-700 text-rose-400 border border-rose-500/50 rounded-full shadow-2xl transition-all flex items-center gap-1.5 font-bold text-xs"
-        >
-          <ShieldCheck className="w-5 h-5 text-rose-500" />
-          <span>Emergency</span>
-        </button>
-        <button
-          onClick={() => setShowSosModal(true)}
-          className="p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse"
-        >
-          <Siren className="w-8 h-8" />
-        </button>
-      </div>
+      {/* 🚨 SOS FLOATING BUTTON */}
+      <button
+        onClick={() => setShowSosModal(true)}
+        className="fixed bottom-24 right-6 z-50 p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse"
+      >
+        <Siren className="w-8 h-8" />
+      </button>
 
       {activeAlert && (
         <div className={`fixed top-4 z-50 w-full max-w-md px-4 py-3 rounded-xl border shadow-lg flex items-center justify-between animate-in slide-in-from-top-2 ${alertStyles(activeAlert.type)}`}>
@@ -490,7 +361,6 @@ export default function HomePage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-1 rounded-full text-xs font-bold"><Award className="w-3.5 h-3.5" /> {points} pts</div>
-          <Link href="/commuter/ticket" className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-emerald-500 hover:text-white transition-all">Ticket</Link>
           <Link href="/driver" className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-slate-700 transition-all"><Navigation className="w-3.5 h-3.5" /> Driver</Link>
         </div>
       </header>
@@ -776,31 +646,7 @@ export default function HomePage() {
               <h2 className="text-lg font-bold text-white flex items-center gap-2"><Megaphone className="w-5 h-5 text-amber-400" /> Abiso sa Kapwa</h2>
               <button onClick={() => setShowReportModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-xs text-slate-400 mb-4">Pumili ng sitwasyon o mag-voice input sa waiting shed ngayon.</p>
-
-            {/* 🎤 VOICE INPUT SECTION */}
-            <div className="mb-4 bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-2 text-center">
-              <button
-                type="button"
-                onClick={handleStartVoiceRecognition}
-                className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-                  isListening
-                    ? "bg-rose-600 text-white animate-pulse"
-                    : "bg-slate-800 text-amber-400 hover:bg-slate-700 border border-slate-700"
-                }`}
-              >
-                <Mic className={`w-4 h-4 ${isListening ? "animate-bounce" : ""}`} />
-                {isListening ? "Listening..." : "Tap to Speak Report"}
-              </button>
-
-              <textarea
-                value={reportText}
-                onChange={(e) => setReportText(e.target.value)}
-                placeholder="Iyong karagdagang ulat (optional)..."
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 h-16 resize-none"
-              />
-            </div>
-
+            <p className="text-xs text-slate-400 mb-4">Pumili ng sitwasyon sa waiting shed ngayon.</p>
             <div className="space-y-2">
               {[
                 { icon: "🚐", label: "May Dumaan" },
@@ -816,91 +662,6 @@ export default function HomePage() {
           </div>
         </div>
       )}
-
-      {/* 🚨 STANDBY EMERGENCY MODAL */}
-      {showStandbyEmergencyModal && (() => {
-        let nearestShed = selectedShed;
-        if (commuterLocation) {
-          let minDist = Infinity;
-          SHEDS.forEach((s) => {
-            const d = getDistance(commuterLocation.lat, commuterLocation.lng, s.lat, s.lng);
-            if (d < minDist) {
-              minDist = d;
-              nearestShed = s;
-            }
-          });
-        }
-
-        const currentEmergencyData = allEmergencyData
-          ? (allEmergencyData[nearestShed.name] || allEmergencyData["Default"])
-          : null;
-
-        const lat = commuterLocation?.lat || selectedShed.lat;
-        const lng = commuterLocation?.lng || selectedShed.lng;
-        const smsUrl = `sms:?body=${encodeURIComponent(`Emergency! I am at lat: ${lat}, lng: ${lng}`)}`;
-
-        return (
-          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <ShieldCheck className="w-6 h-6 text-rose-500" /> Emergency Hotlines
-                </h2>
-                <button onClick={() => setShowStandbyEmergencyModal(false)} className="p-1 text-slate-400 hover:text-white transition">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <p className="text-xs text-slate-400 mb-4">Nearest Area: <span className="font-bold text-emerald-400">{nearestShed.name}</span></p>
-
-              {currentEmergencyData ? (
-                <div className="space-y-3">
-                  <a href={`tel:${currentEmergencyData.pnp}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-950 text-blue-400 rounded-lg"><ShieldCheck className="w-4 h-4" /></div>
-                      <div>
-                        <p className="font-bold text-white text-xs">PNP {nearestShed.name}</p>
-                        <p className="text-[10px] text-slate-400">{currentEmergencyData.pnp}</p>
-                      </div>
-                    </div>
-                    <Phone className="w-4 h-4 text-emerald-400" />
-                  </a>
-                  <a href={`tel:${currentEmergencyData.bfp}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-rose-950 text-rose-400 rounded-lg"><Flame className="w-4 h-4" /></div>
-                      <div>
-                        <p className="font-bold text-white text-xs">BFP {nearestShed.name}</p>
-                        <p className="text-[10px] text-slate-400">{currentEmergencyData.bfp}</p>
-                      </div>
-                    </div>
-                    <Phone className="w-4 h-4 text-emerald-400" />
-                  </a>
-                  <a href={`tel:${currentEmergencyData.rescue}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-emerald-950 text-emerald-400 rounded-lg"><HeartPulse className="w-4 h-4" /></div>
-                      <div>
-                        <p className="font-bold text-white text-xs">MDRRMO {nearestShed.name}</p>
-                        <p className="text-[10px] text-slate-400">{currentEmergencyData.rescue}</p>
-                      </div>
-                    </div>
-                    <Phone className="w-4 h-4 text-emerald-400" />
-                  </a>
-                </div>
-              ) : (
-                <p className="text-center text-slate-400 py-4 text-xs">Kinakarga ang emergency contacts...</p>
-              )}
-
-              <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
-                <a href={smsUrl} className="flex items-center justify-center w-full py-3 bg-emerald-600 text-slate-950 font-black rounded-xl text-xs hover:bg-emerald-500 transition-all gap-2">
-                  <Share2 className="w-4 h-4" /> Share Location via SMS
-                </a>
-                <a href="tel:911" className="flex items-center justify-center w-full py-3 bg-rose-600 text-white font-black rounded-xl text-xs hover:bg-rose-500 transition-all gap-2">
-                  <Siren className="w-4 h-4" /> CALL 911 (National)
-                </a>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* 🚨 SOS MODAL (PNP, BFP, RESCUE) */}
       {showSosModal && (
