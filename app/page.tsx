@@ -48,7 +48,7 @@ export default function HomePage() {
 
   const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
   const [isWaiting, setIsWaiting] = useState(false);
-  const [waitingVehicle, setWaitingVehicle] = useState<"Van" | "Bus" | "MiniBus" | "Taxi" | "Tricycle" | "Motor">("Van"); // 🚨 IDINAGDAG DITO
+  const [waitingVehicle, setWaitingVehicle] = useState<"Any" | "Van" | "Bus" | "MiniBus" | "Taxi" | "Tricycle" | "Motor">("Any");
   const [searchQuery, setSearchQuery] = useState("");
   const [showFareMatrix, setShowFareMatrix] = useState(false);
   const [vehicleFilter, setVehicleFilter] = useState<"All" | "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus">("All");
@@ -505,15 +505,15 @@ export default function HomePage() {
         
                 <div className="space-y-2">
           {/* 🚨 VEHICLE SELECTOR DROPDOWN */}
-          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
+                    <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
             <span className="text-xs text-slate-400 flex items-center gap-1"><Bus className="w-3 h-3" /> Hinihintay ko:</span>
             <select 
               value={waitingVehicle} 
               onChange={(e) => setWaitingVehicle(e.target.value as any)}
               className="bg-slate-800 text-emerald-400 text-xs font-bold rounded-lg px-2 py-1 outline-none border border-slate-700"
             >
-              {["Van", "Bus", "MiniBus", "Taxi", "Tricycle", "Motor"].map(v => (
-                <option key={v} value={v}>{v}</option>
+              {["Any", "Van", "Bus", "MiniBus", "Taxi", "Tricycle", "Motor"].map(v => (
+                <option key={v} value={v}>{v === "Any" ? "Any Vehicle" : v}</option>
               ))}
             </select>
           </div>

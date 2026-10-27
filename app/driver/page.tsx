@@ -76,7 +76,7 @@ export default function DriverDashboard() {
     }
   }, []);
 
-  // 3. WAITING PINGS & ROADSIDE RADAR
+    // 3. WAITING PINGS & ROADSIDE RADAR
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
     const unsub = onValue(waitingRef, (snapshot) => {
@@ -88,17 +88,23 @@ export default function DriverDashboard() {
 
         Object.values(data).forEach((val: any) => {
           if (!val.expiresAt || Date.now() < val.expiresAt) {
+            
+            // 🚨 HYBRID LOGIC: Kung "Any" ang hinihintay, lahat makakaalam. Kung specific, dun lang sa kapareho.
+            if (val.vehicleType && val.vehicleType !== "Any" && val.vehicleType !== vehicleType) {
+              return; 
+            }
+
             let isValid = true;
-            let distance = 0;
+            let distance = 99; // Default malayo kung walang GPS
 
             if (driverLocRef.current) {
               distance = getDistance(driverLocRef.current.lat, driverLocRef.current.lng, val.lat || 6.7497, val.lng || 125.3572);
-              if (distance > 15) isValid = false;
+              if (distance > 15) isValid = false; // Max 15km limit
             }
 
             if (isValid) {
-              // 🚨 Kung within 5km, isama sa nearby radar
-              if (distance > 0 && distance <= 5) {
+              // 🚨 ROADSIDE RADAR: Kung within 5km, isama sa listahan
+              if (distance <= 5) {
                 nearbyList.push({ ...val, distance });
               }
 
@@ -128,8 +134,7 @@ export default function DriverDashboard() {
       }
     });
     return () => unsub();
-  }, [toast]);
-
+  }, [toast, vehicleType]); // 🚨 Importante na nandito ang vehicleType para mag-refresh pag nagpalit ng sasakyan ang driver
   // 4. STOP REQUEST (Bababa Ako)
   useEffect(() => {
     const stopRef = ref(database, "stop_request");
