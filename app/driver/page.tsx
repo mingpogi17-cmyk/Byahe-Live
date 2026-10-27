@@ -24,12 +24,15 @@ export default function DriverDashboard() {
   const [seats, setSeats] = useState(14);
   const [earnings, setEarnings] = useState(0);
   const [fare, setFare] = useState(15);
+  const [dailyEarnings, setDailyEarnings] = useState(0);
+  const [dailyPassengers, setDailyPassengers] = useState(0);
   
   // ALERTS STATE
   const [waitingCount, setWaitingCount] = useState(0);
   const [waitingByShed, setWaitingByShed] = useState<Record<string, number>>({});
   const [showStopAlert, setShowStopAlert] = useState(false);
   const [showSosAlert, setShowSosAlert] = useState(false);
+  const [showHarassmentAlert, setShowHarassmentAlert] = useState(false);
   
   // GPS Ref
   const watchIdRef = useRef<number | null>(null);
@@ -45,8 +48,16 @@ export default function DriverDashboard() {
     if (savedTrip === "true") {
       setIsTripActive(true);
     }
+    const savedDailyEarnings = parseFloat(localStorage.getItem("biyahe_daily_earnings") || "0");
+    const savedDailyPassengers = parseInt(localStorage.getItem("biyahe_daily_passengers") || "0");
+    setDailyEarnings(savedDailyEarnings);
+    setDailyPassengers(savedDailyPassengers);
     setIsMounted(true);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("biyahe_current_fare", fare.toString());
+  }, [fare]);
 
   // 2. GLOBAL GPS TRACKER PARA SA ALERTS
   useEffect(() => {
@@ -128,15 +139,27 @@ export default function DriverDashboard() {
     return () => unsub();
   }, []);
 
-  // 5. SOS ALERT
+  // 5. SOS & HARASSMENT ALERT
   useEffect(() => {
     const sosRef = ref(database, "sos_alert");
     const unsub = onValue(sosRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const hasRecentSos = Object.values(data).some((req: any) => 
-          Date.now() - req.timestamp < 60000 
+
+        const hasRecentHarassment = Object.values(data).some((req: any) =>
+          req.type === "harassment" && Date.now() - req.timestamp < 60000
         );
+
+        const hasRecentSos = Object.values(data).some((req: any) => 
+          req.type !== "harassment" && Date.now() - req.timestamp < 60000
+        );
+
+        if (hasRecentHarassment) {
+          setShowHarassmentAlert(true);
+          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+          setTimeout(() => setShowHarassmentAlert(false), 10000);
+        }
+
         if (hasRecentSos) {
           setShowSosAlert(true);
           if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
@@ -200,6 +223,19 @@ export default function DriverDashboard() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 flex flex-col items-center relative">
       
+      {showHarassmentAlert && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[999] w-11/12 max-w-sm bg-rose-600 text-white p-4 rounded-xl shadow-2xl flex items-center justify-between animate-pulse">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="w-8 h-8 text-white shrink-0" />
+            <div>
+              <p className="font-black text-sm uppercase tracking-wider text-white">HARASSMENT ALERT</p>
+              <p className="text-xs font-bold text-rose-100">Emergency inside vehicle!</p>
+            </div>
+          </div>
+          <button onClick={() => setShowHarassmentAlert(false)} className="px-3 py-1 bg-black/20 rounded-lg hover:bg-black/40 text-xs font-bold">OK</button>
+        </div>
+      )}
+
       {showSosAlert && (
         <div className="fixed inset-0 z-[999] bg-rose-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in zoom-in">
           <Siren className="w-24 h-24 text-rose-500 animate-pulse mb-4" />
@@ -299,6 +335,26 @@ export default function DriverDashboard() {
         </div>
 
         <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-300">
+              Today's Summary: <span className="text-emerald-400 font-black">₱{dailyEarnings}</span> <span className="text-slate-600">|</span> <span className="text-amber-400 font-black">{dailyPassengers}</span> Passengers
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setDailyEarnings(0);
+              setDailyPassengers(0);
+              localStorage.removeItem("biyahe_daily_earnings");
+              localStorage.removeItem("biyahe_daily_passengers");
+              toast("Summary reset!", "info");
+            }}
+            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg transition"
+          >
+            Reset
+          </button>
+        </div>
+
+        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
           <button onClick={() => setSeats(Math.max(0, seats - 1))} className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl font-black text-slate-300 hover:bg-slate-700">-</button>
           <div className="text-center">
             <p className="text-[10px] text-slate-500 font-bold">AVAILABLE SEATS</p>
@@ -311,7 +367,7 @@ export default function DriverDashboard() {
           <Link href="/driver/scan" className="flex items-center justify-center gap-2 py-3 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-xl font-bold hover:bg-blue-600/30 transition-all text-xs">
             <QrCode className="w-4 h-4" /> Scan Ticket
           </Link>
-          <button className="flex items-center justify-center gap-2 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700 transition-all text-xs">
+          <button onClick={() => toast("Settings feature coming soon!", "info")} className="flex items-center justify-center gap-2 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700 transition-all text-xs">
             <Settings className="w-4 h-4" /> Settings
           </button>
         </div>

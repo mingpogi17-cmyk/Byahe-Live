@@ -15,7 +15,7 @@ export default function ScanPage() {
 
     const initScanner = async () => {
       const { Html5QrcodeScanner } = await import("html5-qrcode");
-      
+
       scanner = new Html5QrcodeScanner(
         "reader",
         { fps: 10, qrbox: { width: 250, height: 250 } },
