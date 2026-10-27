@@ -7,7 +7,7 @@ import { ref, set, push } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic
 } from "lucide-react";
 
 import { SHEDS, STORAGE_KEYS, COOLDOWNS, TripData, Shed } from "@/lib/constants";
@@ -42,6 +42,10 @@ export default function HomePage() {
   const [feedbackName, setFeedbackName] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
   
+  // 🚨 VOICE-TO-TEXT STATES
+  const [isListening, setIsListening] = useState(false);
+  const [reportText, setReportText] = useState("");
+
   const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
   const [isWaiting, setIsWaiting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -316,6 +320,45 @@ export default function HomePage() {
     }
   };
 
+  const handleStartVoiceRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast("Voice recognition not supported on this browser.", "error");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setReportText((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        setIsListening(false);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (err) {
+      console.error("Error starting speech recognition:", err);
+      setIsListening(false);
+    }
+  };
+
   const handleCommunityReport = async (type: string) => {
     if (Date.now() - lastReportTime < COOLDOWNS.communityReportMs) return toast("Nag-report ka na kamakailan lang.", "info");
     if (dailyPoints >= COOLDOWNS.dailyPointCap) return toast("Naabot mo na ang max points ngayong araw.", "info");
@@ -329,8 +372,10 @@ export default function HomePage() {
       localStorage.setItem(STORAGE_KEYS.points, newPoints.toString()); 
       localStorage.setItem(STORAGE_KEYS.dailyPoints, newDailyPoints.toString()); 
       localStorage.setItem(STORAGE_KEYS.lastReportTime, newTime.toString());
-      await sendCommunityReport(type);
+      const fullReportMsg = reportText.trim() ? `${type}: ${reportText.trim()}` : type;
+      await sendCommunityReport(fullReportMsg);
       setShowReportModal(false); 
+      setReportText("");
       if (navigator.vibrate) navigator.vibrate(50); 
       toast(`Salamat! +5 Points!`, "success");
     } catch (err) { console.error(err); }
@@ -731,7 +776,31 @@ export default function HomePage() {
               <h2 className="text-lg font-bold text-white flex items-center gap-2"><Megaphone className="w-5 h-5 text-amber-400" /> Abiso sa Kapwa</h2>
               <button onClick={() => setShowReportModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-xs text-slate-400 mb-4">Pumili ng sitwasyon sa waiting shed ngayon.</p>
+            <p className="text-xs text-slate-400 mb-4">Pumili ng sitwasyon o mag-voice input sa waiting shed ngayon.</p>
+
+            {/* 🎤 VOICE INPUT SECTION */}
+            <div className="mb-4 bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-2 text-center">
+              <button
+                type="button"
+                onClick={handleStartVoiceRecognition}
+                className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                  isListening
+                    ? "bg-rose-600 text-white animate-pulse"
+                    : "bg-slate-800 text-amber-400 hover:bg-slate-700 border border-slate-700"
+                }`}
+              >
+                <Mic className={`w-4 h-4 ${isListening ? "animate-bounce" : ""}`} />
+                {isListening ? "Listening..." : "Tap to Speak Report"}
+              </button>
+
+              <textarea
+                value={reportText}
+                onChange={(e) => setReportText(e.target.value)}
+                placeholder="Iyong karagdagang ulat (optional)..."
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 h-16 resize-none"
+              />
+            </div>
+
             <div className="space-y-2">
               {[
                 { icon: "🚐", label: "May Dumaan" },
