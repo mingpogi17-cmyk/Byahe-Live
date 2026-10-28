@@ -3,11 +3,11 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { database } from "@/lib/firebase";
-import { ref, set } from "firebase/database";
+import { ref, set, push, get } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic
 } from "lucide-react";
 
 import { SHEDS, STORAGE_KEYS, COOLDOWNS, TripData, Shed } from "@/lib/constants";
@@ -64,6 +64,117 @@ export default function HomePage() {
   const [sleepAlarmActive, setSleepAlarmActive] = useState(false);
   const [sleepAlarmDistance, setSleepAlarmDistance] = useState<number>(1);
   const [commuterLocation, setCommuterLocation] = useState<{lat: number, lng: number} | null>(null);
+
+  // 🚨 POCKET MODE & SHAKE TO SOS STATES
+  const [isPocketMode, setIsPocketMode] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [reportText, setReportText] = useState("");
+  const [showStandbyEmergencyModal, setShowStandbyEmergencyModal] = useState(false);
+  const [allEmergencyData, setAllEmergencyData] = useState<any>(null);
+
+  useEffect(() => {
+    const savedPocketMode = localStorage.getItem("biyahe_pocket_mode");
+    if (savedPocketMode === "true") setIsPocketMode(true);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("biyahe_pocket_mode", isPocketMode.toString());
+  }, [isPocketMode]);
+
+  // 🚨 SHAKE TO SOS LOGIC (4 rapid shakes within 2000ms, threshold 30)
+  useEffect(() => {
+    let shakeTimes: number[] = [];
+    const SHAKE_THRESHOLD = 30;
+
+    const triggerSilentSOS = async () => {
+      try {
+        let hasAudio = false;
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            hasAudio = true;
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+            setTimeout(() => {
+              if (mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+                stream.getTracks().forEach((track) => track.stop());
+              }
+            }, 15000);
+          } catch (e) {
+            console.log("Audio recording permission denied or error:", e);
+          }
+        }
+
+        const activeTicketId = localStorage.getItem("active_ticket");
+        let targetDriverId: string | null = null;
+
+        if (activeTicketId) {
+          try {
+            const ticketSnapshot = await get(ref(database, `tickets/${activeTicketId}`));
+            if (ticketSnapshot.exists()) {
+              const ticketData = ticketSnapshot.val();
+              if (ticketData.driverId) {
+                targetDriverId = ticketData.driverId;
+              }
+            }
+          } catch (err) {
+            console.error("Error checking active ticket for driverId:", err);
+          }
+        }
+
+        const sosPayload: any = {
+          id: "sos_" + Date.now(),
+          type: "harassment",
+          userId: userId || "anonymous",
+          lat: commuterLocation?.lat || selectedShed.lat,
+          lng: commuterLocation?.lng || selectedShed.lng,
+          shed: selectedShed.name,
+          hasAudio,
+          timestamp: Date.now()
+        };
+
+        if (targetDriverId) {
+          sosPayload.targetDriverId = targetDriverId;
+        }
+
+        await push(ref(database, "sos_alert"), sosPayload);
+        toast("Safety ping sent.", "info");
+      } catch (err) {
+        console.error("Error triggering silent SOS:", err);
+      }
+    };
+
+    const handleMotion = (event: DeviceMotionEvent) => {
+      if (isPocketMode) return;
+      const acc = event.accelerationIncludingGravity;
+      if (!acc) return;
+      const x = acc.x || 0;
+      const y = acc.y || 0;
+      const z = acc.z || 0;
+      const totalAcc = Math.sqrt(x * x + y * y + z * z);
+
+      if (totalAcc > SHAKE_THRESHOLD) {
+        const now = Date.now();
+        shakeTimes = shakeTimes.filter((t) => now - t <= 2000);
+        shakeTimes.push(now);
+
+        if (shakeTimes.length >= 4) {
+          shakeTimes = [];
+          triggerSilentSOS();
+        }
+      }
+    };
+
+    if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
+      window.addEventListener("devicemotion", handleMotion);
+    }
+    return () => {
+      if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
+        window.removeEventListener("devicemotion", handleMotion);
+      }
+    };
+  }, [isPocketMode, commuterLocation, selectedShed, userId, toast]);
 
   useEffect(() => {
     const savedPoints = localStorage.getItem(STORAGE_KEYS.points);
@@ -417,6 +528,14 @@ export default function HomePage() {
                 <p className="text-[10px] font-bold text-white">Discounted Fare (20%)</p>
               </div>
               <button onClick={() => setIsDiscounted(!isDiscounted)} className={`px-2 py-1 rounded text-[10px] font-bold ${isDiscounted ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-slate-400'}`}>{isDiscounted ? "ON" : "OFF"}</button>
+            </div>
+
+            <div className="flex items-center justify-between bg-slate-800 p-2 rounded-lg">
+              <div className="flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <p className="text-[10px] font-bold text-white">Pocket Mode (Disable Shake SOS)</p>
+              </div>
+              <button onClick={() => setIsPocketMode(!isPocketMode)} className={`px-2 py-1 rounded text-[10px] font-bold ${isPocketMode ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-400'}`}>{isPocketMode ? "ON" : "OFF"}</button>
             </div>
           </div>
         )}
