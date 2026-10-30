@@ -472,7 +472,7 @@ export default function HomePage() {
           <span>Emergency</span>
         </button>
         <button
-          onClick={() => setShowSosModal(true)}
+          onClick={() => setShowStandbyEmergencyModal(true)}
           className="p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse"
         >
           <Siren className="w-8 h-8" />
