@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { database } from "@/lib/firebase";
-import { ref, onValue, set, remove } from "firebase/database";
+import { ref, onValue, set, remove, get } from "firebase/database";
 import { 
   Navigation, Users, Settings, ShieldCheck, 
   WifiOff, Siren, ArrowLeft, Play, Square, MapPin, QrCode, AlertTriangle
@@ -76,7 +76,7 @@ export default function DriverDashboard() {
     }
   }, []);
 
-    // 3. WAITING PINGS & ROADSIDE RADAR
+  // 3. WAITING PINGS & ROADSIDE RADAR
   useEffect(() => {
     const waitingRef = ref(database, "waiting_commuters");
     const unsub = onValue(waitingRef, (snapshot) => {
@@ -89,21 +89,20 @@ export default function DriverDashboard() {
         Object.values(data).forEach((val: any) => {
           if (!val.expiresAt || Date.now() < val.expiresAt) {
             
-            // 🚨 HYBRID LOGIC: Kung "Any" ang hinihintay, lahat makakaalam. Kung specific, dun lang sa kapareho.
+            // HYBRID LOGIC: Kung "Any" ang hinihintay, lahat makakaalam. Kung specific, dun lang sa kapareho.
             if (val.vehicleType && val.vehicleType !== "Any" && val.vehicleType !== vehicleType) {
               return; 
             }
 
             let isValid = true;
-            let distance = 99; // Default malayo kung walang GPS
+            let distance = 99;
 
             if (driverLocRef.current) {
               distance = getDistance(driverLocRef.current.lat, driverLocRef.current.lng, val.lat || 6.7497, val.lng || 125.3572);
-              if (distance > 15) isValid = false; // Max 15km limit
+              if (distance > 15) isValid = false;
             }
 
             if (isValid) {
-              // 🚨 ROADSIDE RADAR: Kung within 5km, isama sa listahan
               if (distance <= 5) {
                 nearbyList.push({ ...val, distance });
               }
@@ -134,7 +133,8 @@ export default function DriverDashboard() {
       }
     });
     return () => unsub();
-  }, [toast, vehicleType]); // 🚨 Importante na nandito ang vehicleType para mag-refresh pag nagpalit ng sasakyan ang driver
+  }, [toast, vehicleType]);
+
   // 4. STOP REQUEST (Bababa Ako)
   useEffect(() => {
     const stopRef = ref(database, "stop_request");
@@ -166,9 +166,11 @@ export default function DriverDashboard() {
       if (snapshot.exists()) {
         const data = snapshot.val();
         
-        const hasRecentHarassment = Object.values(data).some((req: any) => 
-          req.type === "harassment" && Date.now() - req.timestamp < 60000 
-        );
+        const hasRecentHarassment = Object.values(data).some((req: any) => {
+          if (req.type !== "harassment" || Date.now() - req.timestamp > 60000) return false;
+          if (req.targetDriverId && req.targetDriverId !== userId) return false;
+          return true;
+        });
 
         const hasRecentSos = Object.values(data).some((req: any) => 
           req.type !== "harassment" && Date.now() - req.timestamp < 60000 
@@ -188,7 +190,7 @@ export default function DriverDashboard() {
       }
     });
     return () => unsub();
-  }, []);
+  }, [userId]);
 
   // 6. LIVE GPS TRACKING PARA SA LIVE_TRIPS
   useEffect(() => {
@@ -302,7 +304,7 @@ export default function DriverDashboard() {
 
       <main className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
         
-        {/* 🚨 ROADSIDE RADAR (Malapit na Pasahero) */}
+        {/* ROADSIDE RADAR */}
         {nearbyPassengers.length > 0 && (
           <div className="bg-amber-950/30 border border-amber-800/50 p-3 rounded-2xl mb-2 animate-in fade-in">
             <p className="text-[10px] text-amber-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-1">
@@ -400,6 +402,36 @@ export default function DriverDashboard() {
             <p className={`text-4xl font-black ${seats === 0 ? 'text-rose-500' : seats <= 3 ? 'text-amber-500' : 'text-emerald-400'}`}>{seats}</p>
           </div>
           <button onClick={() => setSeats(seats + 1)} className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl font-black text-slate-300 hover:bg-slate-700">+</button>
+        </div>
+
+        {/* MANUAL FARE ADD */}
+        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+          <p className="text-xs font-bold text-white mb-2">Manual Fare Add (Walk-in)</p>
+          <div className="flex gap-2">
+            <input 
+              type="number" 
+              id="manualFareInput"
+              placeholder="Amount (e.g. 15)" 
+              className="flex-1 bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white"
+            />
+            <button 
+              onClick={() => {
+                const input = document.getElementById("manualFareInput") as HTMLInputElement;
+                const amount = parseFloat(input.value);
+                if (!isNaN(amount) && amount > 0) {
+                  setDailyEarnings(prev => prev + amount);
+                  setDailyPassengers(prev => prev + 1);
+                  localStorage.setItem("biyahe_daily_earnings", (dailyEarnings + amount).toString());
+                  localStorage.setItem("biyahe_daily_passengers", (dailyPassengers + 1).toString());
+                  input.value = "";
+                  toast(`Added ₱${amount}. Earnings updated.`, "success");
+                }
+              }}
+              className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg text-xs hover:bg-emerald-500"
+            >
+              Add
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mt-2">
