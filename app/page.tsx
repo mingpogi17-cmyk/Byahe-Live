@@ -7,7 +7,7 @@ import { ref, set, push, get } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic, Camera
 } from "lucide-react";
 
 import { SHEDS, STORAGE_KEYS, COOLDOWNS, TripData, Shed } from "@/lib/constants";
@@ -35,17 +35,27 @@ export default function HomePage() {
   const [alarms, setAlarms] = useState<{[key: string]: number}>({});
   const [points, setPoints] = useState(0);
   const [showSosModal, setShowSosModal] = useState(false);
+  const [showStandbyEmergencyModal, setShowStandbyEmergencyModal] = useState(false);
   const [showGcashModal, setShowGcashModal] = useState(false);
   
   // 🚨 FEEDBACK STATES
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackName, setFeedbackName] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
+
+  // 🚨 EMERGENCY REPORT STATES
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
+  const [emergencyType, setEmergencyType] = useState("");
+  const [emergencyPhoto, setEmergencyPhoto] = useState<string | null>(null);
+  const [isReportingEmergency, setIsReportingEmergency] = useState(false);
   
   // 🚨 VOICE-TO-TEXT STATES
   const [isListening, setIsListening] = useState(false);
   const [reportText, setReportText] = useState("");
 
+  // 🚨 POCKET MODE STATE
+  const [isPocketMode, setIsPocketMode] = useState(false);
+  
   const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
   const [isWaiting, setIsWaiting] = useState(false);
   const [waitingVehicle, setWaitingVehicle] = useState<"Any" | "Van" | "Bus" | "MiniBus" | "Taxi" | "Tricycle" | "Motor">("Any");
@@ -54,7 +64,6 @@ export default function HomePage() {
   const [vehicleFilter, setVehicleFilter] = useState<"All" | "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus">("All");
   const [comfortFilter, setComfortFilter] = useState<"All" | "Aircon" | "Non-Aircon">("All");
   const [emergencyData, setEmergencyData] = useState<any>(null);
-  const [allEmergencyData, setAllEmergencyData] = useState<any>(null);
   
   const [lastReportTime, setLastReportTime] = useState(0);
   const [dailyPoints, setDailyPoints] = useState(0);
@@ -70,89 +79,19 @@ export default function HomePage() {
   const [sleepAlarmActive, setSleepAlarmActive] = useState(false);
   const [sleepAlarmDistance, setSleepAlarmDistance] = useState<number>(1);
   const [commuterLocation, setCommuterLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [showStandbyEmergencyModal, setShowStandbyEmergencyModal] = useState(false);
-
-  // 🚨 SHAKE TO SOS LOGIC (3 rapid shakes in 1.5 seconds)
-  useEffect(() => {
-    let shakeTimes: number[] = [];
-    const SHAKE_THRESHOLD = 20;
-
-    const triggerSilentSOS = async () => {
-      try {
-        let hasAudio = false;
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            hasAudio = true;
-            const mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.start();
-            setTimeout(() => {
-              if (mediaRecorder.state !== "inactive") {
-                mediaRecorder.stop();
-                stream.getTracks().forEach((track) => track.stop());
-              }
-            }, 15000);
-          } catch (e) {
-            console.log("Audio recording permission denied or error:", e);
-          }
-        }
-
-        await push(ref(database, "sos_alert"), {
-          id: "sos_" + Date.now(),
-          type: "harassment",
-          userId: userId || "anonymous",
-          lat: commuterLocation?.lat || selectedShed.lat,
-          lng: commuterLocation?.lng || selectedShed.lng,
-          shed: selectedShed.name,
-          hasAudio,
-          timestamp: Date.now()
-        });
-
-        toast("Safety ping sent.", "info");
-      } catch (err) {
-        console.error("Error triggering silent SOS:", err);
-      }
-    };
-
-    const handleMotion = (event: DeviceMotionEvent) => {
-      const acc = event.accelerationIncludingGravity;
-      if (!acc) return;
-      const x = acc.x || 0;
-      const y = acc.y || 0;
-      const z = acc.z || 0;
-      const totalAcc = Math.sqrt(x * x + y * y + z * z);
-
-      if (totalAcc > SHAKE_THRESHOLD) {
-        const now = Date.now();
-        shakeTimes = shakeTimes.filter((t) => now - t <= 1500);
-        shakeTimes.push(now);
-
-        if (shakeTimes.length >= 3) {
-          shakeTimes = [];
-          triggerSilentSOS();
-        }
-      }
-    };
-
-    if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
-      window.addEventListener("devicemotion", handleMotion);
-    }
-    return () => {
-      if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
-        window.removeEventListener("devicemotion", handleMotion);
-      }
-    };
-  }, [commuterLocation, selectedShed, userId, toast]);
 
   useEffect(() => {
     const savedPoints = localStorage.getItem(STORAGE_KEYS.points);
-    if (savedPoints) setPoints(parseInt(savedPoints));
+    if (savedPoints) setPoints(parseFloat(savedPoints));
     const savedDaily = localStorage.getItem(STORAGE_KEYS.dailyPoints);
     if (savedDaily) setDailyPoints(parseInt(savedDaily));
     const savedReportTime = localStorage.getItem(STORAGE_KEYS.lastReportTime);
     if (savedReportTime) setLastReportTime(parseInt(savedReportTime));
     const hasOnboarded = localStorage.getItem(STORAGE_KEYS.onboarded);
     if (!hasOnboarded) setShowOnboarding(true);
+    const savedPocketMode = localStorage.getItem("biyahe_pocket_mode");
+    if (savedPocketMode === "true") setIsPocketMode(true);
+    
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
@@ -167,19 +106,20 @@ export default function HomePage() {
     }
   }, []);
 
+  // 🚨 AUTO WAITING PING
   useEffect(() => {
     if (!commuterLocation) return;
     const distanceToShed = getDistance(commuterLocation.lat, commuterLocation.lng, selectedShed.lat, selectedShed.lng);
     const isNearShed = distanceToShed <= 0.05;
     
     if (isNearShed && !isWaiting) { 
-      sendWaitingPing(commuterLocation.lat, commuterLocation.lng); 
+      sendWaitingPing(commuterLocation.lat, commuterLocation.lng, waitingVehicle); 
       setIsWaiting(true); 
     } else if (!isNearShed && isWaiting) {
       cancelWaitingPing();
       setIsWaiting(false);
     }
-  }, [commuterLocation, selectedShed, isWaiting, sendWaitingPing, cancelWaitingPing]);
+  }, [commuterLocation, selectedShed, isWaiting, sendWaitingPing, cancelWaitingPing, waitingVehicle]);
 
   useEffect(() => {
     const savedShedId = localStorage.getItem(STORAGE_KEYS.favoriteShed);
@@ -200,11 +140,9 @@ export default function HomePage() {
 
   useEffect(() => {
     fetch("/emergency-directory.json").then(res => res.json()).then(data => {
-      setAllEmergencyData(data);
-      const shedKey = Object.keys(data).find(key => selectedShed.name.includes(key));
-      setEmergencyData(data[shedKey || "Default"]);
+      setEmergencyData(data);
     }).catch(err => console.error("Emergency fetch error:", err));
-  }, [selectedShed]);
+  }, []);
 
   const sortedAndFilteredTrips = useMemo(() => {
     let filtered = trips.filter(trip => {
@@ -260,6 +198,93 @@ export default function HomePage() {
     }
   }, [sortedAndFilteredTrips, sleepAlarmActive, sleepDestination, sleepAlarmDistance, toast]);
 
+  // 🚨 SHAKE TO SOS LOGIC
+  useEffect(() => {
+    let shakeTimes: number[] = [];
+    const SHAKE_THRESHOLD = 30;
+    const SHAKE_TIMEOUT = 2000;
+
+    const triggerSilentSOS = async () => {
+      try {
+        let hasAudio = false;
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            hasAudio = true;
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+            setTimeout(() => {
+              if (mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+                stream.getTracks().forEach((track) => track.stop());
+              }
+            }, 15000);
+          } catch (e) {
+            console.log("Audio recording permission denied or error:", e);
+          }
+        }
+
+        const activeTicket = localStorage.getItem("active_ticket");
+        let targetDriverId = null;
+        if (activeTicket) {
+          try {
+            const snap = await get(ref(database, `tickets/${activeTicket}`));
+            if (snap.exists() && snap.val().status === "used") {
+              targetDriverId = snap.val().driverId;
+            }
+          } catch (error) {
+            console.error("Error checking active ticket for driverId:", error);
+          }
+        }
+
+        await push(ref(database, "sos_alert"), {
+          id: "sos_" + Date.now(),
+          type: "harassment",
+          userId: userId || "anonymous",
+          lat: commuterLocation?.lat || selectedShed.lat,
+          lng: commuterLocation?.lng || selectedShed.lng,
+          shed: selectedShed.name,
+          hasAudio,
+          targetDriverId,
+          timestamp: Date.now()
+        });
+        toast("Safety ping sent.", "info");
+      } catch (err) {
+        console.error("Error triggering silent SOS:", err);
+      }
+    };
+
+    const handleMotion = (event: DeviceMotionEvent) => {
+      if (isPocketMode) return; 
+      const acc = event.accelerationIncludingGravity;
+      if (!acc) return;
+      const x = acc.x || 0;
+      const y = acc.y || 0;
+      const z = acc.z || 0;
+      const totalAcc = Math.sqrt(x * x + y * y + z * z);
+
+      if (totalAcc > SHAKE_THRESHOLD) {
+        const now = Date.now();
+        shakeTimes = shakeTimes.filter((t) => now - t <= SHAKE_TIMEOUT);
+        shakeTimes.push(now);
+
+        if (shakeTimes.length >= 4) {
+          shakeTimes = [];
+          triggerSilentSOS();
+        }
+      }
+    };
+
+    if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
+      window.addEventListener("devicemotion", handleMotion);
+    }
+    return () => {
+      if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
+        window.removeEventListener("devicemotion", handleMotion);
+      }
+    };
+  }, [commuterLocation, selectedShed, userId, toast, isPocketMode]);
+
   const getMinutesAgo = (timestamp: number) => Math.max(0, Math.floor((now - timestamp) / 60000));
   
   const handleFavoriteShed = () => { 
@@ -267,7 +292,7 @@ export default function HomePage() {
     else { localStorage.setItem(STORAGE_KEYS.favoriteShed, selectedShed.id); setIsFavorite(true); } 
   };
 
-    const handleManualWaitingPing = () => {
+  const handleManualWaitingPing = () => {
     if (isWaiting) {
       cancelWaitingPing();
       setIsWaiting(false);
@@ -278,7 +303,6 @@ export default function HomePage() {
     const lat = commuterLocation?.lat || selectedShed.lat;
     const lng = commuterLocation?.lng || selectedShed.lng;
 
-    // 🚨 Hahanapin kung anong pinakamalapit na shed para maging reference
     let nearestShedName = selectedShed.name;
     let minDist = Infinity;
     SHEDS.forEach(s => {
@@ -326,6 +350,89 @@ export default function HomePage() {
     }
   };
 
+  const handleCommunityReport = async (type: string) => {
+    if (Date.now() - lastReportTime < COOLDOWNS.communityReportMs) return toast("Nag-report ka na kamakailan lang.", "info");
+    if (dailyPoints >= COOLDOWNS.dailyPointCap) return toast("Naabot mo na ang max points ngayong araw.", "info");
+    try {
+      const newPoints = points + 5; 
+      const newDailyPoints = dailyPoints + 5;
+      const newTime = Date.now();
+      setPoints(newPoints); 
+      setDailyPoints(newDailyPoints);
+      setLastReportTime(newTime);
+      localStorage.setItem(STORAGE_KEYS.points, newPoints.toString()); 
+      localStorage.setItem(STORAGE_KEYS.dailyPoints, newDailyPoints.toString()); 
+      localStorage.setItem(STORAGE_KEYS.lastReportTime, newTime.toString());
+      
+      const fullReportMsg = reportText.trim() ? `${type}: ${reportText.trim()}` : type;
+      await sendCommunityReport(fullReportMsg);
+      
+      setShowReportModal(false); 
+      setReportText("");
+      if (navigator.vibrate) navigator.vibrate(50); 
+      toast(`Salamat! +5 Points!`, "success");
+    } catch (err) { console.error(err); }
+  };
+
+  const handleSendFeedback = async () => {
+    if (!feedbackText.trim()) return toast("Paki-type ang iyong feedback.", "error");
+    try {
+      await set(ref(database, `feedbacks/${Date.now()}`), {
+        name: feedbackName || "Anonymous",
+        feedback: feedbackText,
+        timestamp: Date.now(),
+        userId: userId || "unknown",
+      });
+      toast("Salamat! Natanggap na namin ang iyong feedback.", "success");
+      setShowFeedbackModal(false);
+      setFeedbackName("");
+      setFeedbackText("");
+    } catch (err) {
+      toast("Error sa pag-send. Subukan muli.", "error");
+    }
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEmergencyPhoto(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleEmergencySubmit = async () => {
+    if (!emergencyType) return toast("Pumili ng uri ng emergency.", "error");
+    if (!emergencyPhoto) return toast("Kailangan ng litrato bilang ebidensya.", "error");
+    if (!commuterLocation) return toast("Hindi ma-detect ang GPS. I-on ang location.", "error");
+
+    setIsReportingEmergency(true);
+    try {
+      const newId = "inc_" + Date.now();
+      await set(ref(database, `emergency_incidents/${newId}`), {
+        id: newId,
+        type: emergencyType,
+        photo: emergencyPhoto,
+        lat: commuterLocation.lat,
+        lng: commuterLocation.lng,
+        timestamp: Date.now(),
+        status: "pending",
+        area: selectedShed.name,
+        userId: userId || "anonymous"
+      });
+      toast("Emergency reported! Responders have been alerted.", "success");
+      setShowEmergencyModal(false);
+      setEmergencyPhoto(null);
+      setEmergencyType("");
+    } catch (err) {
+      toast("Error sa pag-report.", "error");
+    } finally {
+      setIsReportingEmergency(false);
+    }
+  };
+
   const handleStartVoiceRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -337,7 +444,7 @@ export default function HomePage() {
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
-      recognition.lang = "fil-PH";
+      recognition.lang = "en-US"; 
 
       recognition.onstart = () => {
         setIsListening(true);
@@ -362,46 +469,6 @@ export default function HomePage() {
     } catch (err) {
       console.error("Error starting speech recognition:", err);
       setIsListening(false);
-    }
-  };
-
-  const handleCommunityReport = async (type: string) => {
-    if (Date.now() - lastReportTime < COOLDOWNS.communityReportMs) return toast("Nag-report ka na kamakailan lang.", "info");
-    if (dailyPoints >= COOLDOWNS.dailyPointCap) return toast("Naabot mo na ang max points ngayong araw.", "info");
-    try {
-      const newPoints = points + 5; 
-      const newDailyPoints = dailyPoints + 5;
-      const newTime = Date.now();
-      setPoints(newPoints); 
-      setDailyPoints(newDailyPoints);
-      setLastReportTime(newTime);
-      localStorage.setItem(STORAGE_KEYS.points, newPoints.toString()); 
-      localStorage.setItem(STORAGE_KEYS.dailyPoints, newDailyPoints.toString()); 
-      localStorage.setItem(STORAGE_KEYS.lastReportTime, newTime.toString());
-      const fullReportMsg = reportText.trim() ? `${type}: ${reportText.trim()}` : type;
-      await sendCommunityReport(fullReportMsg);
-      setShowReportModal(false); 
-      setReportText("");
-      if (navigator.vibrate) navigator.vibrate(50); 
-      toast(`Salamat! +5 Points!`, "success");
-    } catch (err) { console.error(err); }
-  };
-
-  const handleSendFeedback = async () => {
-    if (!feedbackText.trim()) return toast("Paki-type ang iyong feedback.", "error");
-    try {
-      await set(ref(database, `feedbacks/${Date.now()}`), {
-        name: feedbackName || "Anonymous",
-        feedback: feedbackText,
-        timestamp: Date.now(),
-        userId: userId || "unknown",
-      });
-      toast("Salamat! Natanggap na namin ang iyong feedback.", "success");
-      setShowFeedbackModal(false);
-      setFeedbackName("");
-      setFeedbackText("");
-    } catch (err) {
-      toast("Error sa pag-send. Subukan muli.", "error");
     }
   };
 
@@ -462,22 +529,13 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 flex flex-col items-center relative">
       
-      {/* 🚨 EMERGENCY & SOS FLOATING BUTTONS */}
-      <div className="fixed bottom-24 right-6 z-50 flex items-center gap-2">
-        <button
-          onClick={() => setShowStandbyEmergencyModal(true)}
-          className="p-3 bg-slate-800 hover:bg-slate-700 text-rose-400 border border-rose-500/50 rounded-full shadow-2xl transition-all flex items-center gap-1.5 font-bold text-xs"
-        >
-          <ShieldCheck className="w-5 h-5 text-rose-500" />
-          <span>Emergency</span>
-        </button>
-        <button
-          onClick={() => setShowStandbyEmergencyModal(true)}
-          className="p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse"
-        >
-          <Siren className="w-8 h-8" />
-        </button>
-      </div>
+      {/* 🚨 SOS FLOATING BUTTON */}
+      <button 
+        onClick={() => setShowSosModal(true)} 
+        className="fixed bottom-24 right-6 z-50 p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse"
+      >
+        <Siren className="w-8 h-8" />
+      </button>
 
       {activeAlert && (
         <div className={`fixed top-4 z-50 w-full max-w-md px-4 py-3 rounded-xl border shadow-lg flex items-center justify-between animate-in slide-in-from-top-2 ${alertStyles(activeAlert.type)}`}>
@@ -496,16 +554,14 @@ export default function HomePage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-1 rounded-full text-xs font-bold"><Award className="w-3.5 h-3.5" /> {points} pts</div>
-          <Link href="/commuter/ticket" className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-emerald-500 hover:text-white transition-all">Ticket</Link>
           <Link href="/driver" className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-slate-700 transition-all"><Navigation className="w-3.5 h-3.5" /> Driver</Link>
         </div>
       </header>
 
       <main className="w-full max-w-md space-y-4 pt-4">
         
-                <div className="space-y-2">
-          {/* 🚨 VEHICLE SELECTOR DROPDOWN */}
-                    <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
             <span className="text-xs text-slate-400 flex items-center gap-1"><Bus className="w-3 h-3" /> Hinihintay ko:</span>
             <select 
               value={waitingVehicle} 
@@ -518,7 +574,6 @@ export default function HomePage() {
             </select>
           </div>
 
-          {/* 🚨 BUTTONS */}
           <div className="grid grid-cols-2 gap-2">
             <button onClick={handleManualWaitingPing} className={`py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 transition-all ${
               isWaiting 
@@ -539,6 +594,13 @@ export default function HomePage() {
           className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${sleepAlarmActive ? 'bg-indigo-500 text-white animate-pulse' : 'bg-slate-800 text-indigo-400 border border-indigo-900/50'}`}
         >
           <Bed className="w-5 h-5" /> {sleepAlarmActive ? `Pahinga Mode ON (${sleepDestination})` : "Sleep Alarm / Pahinga Mode"}
+        </button>
+
+        <button 
+          onClick={() => setShowEmergencyModal(true)}
+          className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all bg-rose-600/20 text-rose-400 border border-rose-900/50 hover:bg-rose-600/30"
+        >
+          <Camera className="w-5 h-5" /> Report Emergency (Photo)
         </button>
 
         <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
@@ -570,6 +632,26 @@ export default function HomePage() {
                 <p className="text-[10px] font-bold text-white">Discounted Fare (20%)</p>
               </div>
               <button onClick={() => setIsDiscounted(!isDiscounted)} className={`px-2 py-1 rounded text-[10px] font-bold ${isDiscounted ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-slate-400'}`}>{isDiscounted ? "ON" : "OFF"}</button>
+            </div>
+            <div className="flex items-center justify-between bg-slate-800 p-2 rounded-lg">
+              <div className="flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <div>
+                  <p className="text-[10px] font-bold text-white">Pocket Mode</p>
+                  <p className="text-[8px] text-slate-400">Shake to SOS OFF</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  const newMode = !isPocketMode;
+                  setIsPocketMode(newMode);
+                  localStorage.setItem("biyahe_pocket_mode", newMode.toString());
+                  toast(newMode ? "Pocket Mode ON. Shake to SOS disabled." : "Pocket Mode OFF. Shake to SOS active.", "info");
+                }} 
+                className={`px-2 py-1 rounded text-[10px] font-bold ${isPocketMode ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-400'}`}
+              >
+                {isPocketMode ? "ON" : "OFF"}
+              </button>
             </div>
           </div>
         )}
@@ -706,38 +788,20 @@ export default function HomePage() {
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-amber-400" /> Send Feedback
-              </h2>
-              <button onClick={() => setShowFeedbackModal(false)} className="p-1 text-slate-400 hover:text-white transition">
-                <X className="w-5 h-5" />
-              </button>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><MessageSquare className="w-5 h-5 text-amber-400" /> Send Feedback</h2>
+              <button onClick={() => setShowFeedbackModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
-            
             <p className="text-xs text-slate-400 mb-4">May gusto ka bang ipadagdag o i-improve? I-type lang sa ibaba!</p>
-            
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-bold text-slate-300 mb-1 block">Pangalan / Driver Name (Optional)</label>
-                <input 
-                  type="text" 
-                  value={feedbackName}
-                  onChange={(e) => setFeedbackName(e.target.value)}
-                  placeholder="e.g. Manong Boy"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-                />
+                <input type="text" value={feedbackName} onChange={(e) => setFeedbackName(e.target.value)} placeholder="e.g. Manong Boy" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500" />
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-300 mb-1 block">Iyong Suhestiyon *</label>
-                <textarea 
-                  value={feedbackText}
-                  onChange={(e) => setFeedbackText(e.target.value)}
-                  placeholder="Halimbawa: Pwede po bang lagyan ng QR code ang resibo..."
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 h-24 resize-none"
-                />
+                <textarea value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} placeholder="Halimbawa: Pwede po bang lagyan ng QR code ang resibo..." className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 h-24 resize-none" />
               </div>
             </div>
-
             <div className="flex gap-2 mt-4">
               <button onClick={() => setShowFeedbackModal(false)} className="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">Cancel</button>
               <button onClick={handleSendFeedback} className="flex-1 py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm hover:bg-emerald-400 transition-all">Send</button>
@@ -840,6 +904,54 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* 🚨 SOS MODAL (PNP, BFP, RESCUE /AMBULANCE) */}
+      {showSosModal && (() => {
+        let nearestShed = selectedShed;
+        if (commuterLocation) {
+          let minDist = Infinity;
+          SHEDS.forEach((s) => {
+            const d = getDistance(commuterLocation.lat, commuterLocation.lng, s.lat, s.lng);
+            if (d < minDist) {
+              minDist = d;
+              nearestShed = s;
+            }
+          });
+        }
+        
+        const currentEmergencyData = emergencyData ? (emergencyData[nearestShed.name] || emergencyData["Default"]) : null;
+
+        return (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-black text-white flex items-center gap-2"><Siren className="w-6 h-6 text-rose-500 animate-pulse" /> Hotlines</h2>
+              <button onClick={() => setShowSosModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-sm text-rose-200 mb-4">Nearest Area: <span className="font-bold text-white">{nearestShed.name}</span></p>
+            {currentEmergencyData ? (
+              <div className="space-y-3">
+                <a href={`tel:${currentEmergencyData.pnp}`} className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-all group">
+                  <div className="flex items-center gap-3"><div className="p-2 bg-blue-950 text-blue-400 rounded-lg"><ShieldCheck className="w-5 h-5" /></div><div><p className="font-bold text-white text-sm">PNP {nearestShed.name}</p><p className="text-xs text-slate-400">{currentEmergencyData.pnp}</p></div></div>
+                  <Phone className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                </a>
+                <a href={`tel:${currentEmergencyData.bfp}`} className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-all group">
+                  <div className="flex items-center gap-3"><div className="p-2 bg-rose-950 text-rose-400 rounded-lg"><Flame className="w-5 h-5" /></div><div><p className="font-bold text-white text-sm">BFP {nearestShed.name}</p><p className="text-xs text-slate-400">{currentEmergencyData.bfp}</p></div></div>
+                  <Phone className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                </a>
+                <a href={`tel:${currentEmergencyData.rescue}`} className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-all group">
+                  <div className="flex items-center gap-3"><div className="p-2 bg-emerald-950 text-emerald-400 rounded-lg"><HeartPulse className="w-5 h-5" /></div><div><p className="font-bold text-white text-sm">RESCUE / AMBULANCE {nearestShed.name}</p><p className="text-xs text-slate-400">{currentEmergencyData.rescue}</p></div></div>
+                  <Phone className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                </a>
+              </div>
+            ) : (<p className="text-center text-slate-400 py-4">Kinakarga ang contacts...</p>)}
+            <div className="mt-4 pt-4 border-t border-rose-800/50">
+              <a href="tel:911" className="flex items-center justify-center w-full py-3 bg-rose-600 text-white font-black rounded-xl shadow-lg hover:bg-rose-500 transition-all gap-2"><Siren className="w-5 h-5" /> CALL 911 (National)</a>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
+
       {/* 🚨 STANDBY EMERGENCY MODAL */}
       {showStandbyEmergencyModal && (() => {
         let nearestShed = selectedShed;
@@ -853,11 +965,7 @@ export default function HomePage() {
             }
           });
         }
-
-        const currentEmergencyData = allEmergencyData
-          ? (allEmergencyData[nearestShed.name] || allEmergencyData["Default"])
-          : null;
-
+        const currentEmergencyData = emergencyData ? (emergencyData[nearestShed.name] || emergencyData["Default"]) : null;
         const lat = commuterLocation?.lat || selectedShed.lat;
         const lng = commuterLocation?.lng || selectedShed.lng;
         const smsUrl = `sms:?body=${encodeURIComponent(`Emergency! I am at lat: ${lat}, lng: ${lng}`)}`;
@@ -866,12 +974,8 @@ export default function HomePage() {
           <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <ShieldCheck className="w-6 h-6 text-rose-500" /> Emergency Hotlines
-                </h2>
-                <button onClick={() => setShowStandbyEmergencyModal(false)} className="p-1 text-slate-400 hover:text-white transition">
-                  <X className="w-5 h-5" />
-                </button>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2"><ShieldCheck className="w-6 h-6 text-rose-500" /> Emergency Hotlines</h2>
+                <button onClick={() => setShowStandbyEmergencyModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
               </div>
               <p className="text-xs text-slate-400 mb-4">Nearest Area: <span className="font-bold text-emerald-400">{nearestShed.name}</span></p>
 
@@ -880,42 +984,31 @@ export default function HomePage() {
                   <a href={`tel:${currentEmergencyData.pnp}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-blue-950 text-blue-400 rounded-lg"><ShieldCheck className="w-4 h-4" /></div>
-                      <div>
-                        <p className="font-bold text-white text-xs">PNP {nearestShed.name}</p>
-                        <p className="text-[10px] text-slate-400">{currentEmergencyData.pnp}</p>
-                      </div>
+                      <div><p className="font-bold text-white text-xs">PNP {nearestShed.name}</p><p className="text-[10px] text-slate-400">{currentEmergencyData.pnp}</p></div>
                     </div>
                     <Phone className="w-4 h-4 text-emerald-400" />
                   </a>
                   <a href={`tel:${currentEmergencyData.bfp}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-rose-950 text-rose-400 rounded-lg"><Flame className="w-4 h-4" /></div>
-                      <div>
-                        <p className="font-bold text-white text-xs">BFP {nearestShed.name}</p>
-                        <p className="text-[10px] text-slate-400">{currentEmergencyData.bfp}</p>
-                      </div>
+                      <div><p className="font-bold text-white text-xs">BFP {nearestShed.name}</p><p className="text-[10px] text-slate-400">{currentEmergencyData.bfp}</p></div>
                     </div>
                     <Phone className="w-4 h-4 text-emerald-400" />
                   </a>
-                                  <a href={`tel:${currentEmergencyData.rescue}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-emerald-950 text-emerald-400 rounded-lg">
-                      <HeartPulse className="w-4 h-4" />
+                  <a href={`tel:${currentEmergencyData.rescue}`} className="flex items-center justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-emerald-950 text-emerald-400 rounded-lg"><HeartPulse className="w-4 h-4" /></div>
+                      <div><p className="font-bold text-white text-xs">RESCUE / AMBULANCE {nearestShed.name}</p><p className="text-[10px] text-slate-400">{currentEmergencyData.rescue}</p></div>
                     </div>
-                    <div>
-                      <p className="font-bold text-white text-xs">RESCUE / AMBULANCE {nearestShed.name}</p>
-                      <p className="text-[10px] text-slate-400">{currentEmergencyData.rescue}</p>
-                    </div>
-                  </div>
-                  <Phone className="w-4 h-4 text-emerald-400" />
-                </a>
+                    <Phone className="w-4 h-4 text-emerald-400" />
+                  </a>
                 </div>
               ) : (
                 <p className="text-center text-slate-400 py-4 text-xs">Kinakarga ang emergency contacts...</p>
               )}
 
               <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
-                <a href={smsUrl} className="flex items-center justify-center w-full py-3 bg-emerald-600 text-slate-950 font-black rounded-xl text-xs hover:bg-emerald-500 transition-all gap-2">
+                <a href={smsUrl} className="flex items-center justify-center w-full py-3 bg-emerald-600 text-white font-black rounded-xl text-xs hover:bg-emerald-500 transition-all gap-2">
                   <Share2 className="w-4 h-4" /> Share Location via SMS
                 </a>
                 <a href="tel:911" className="flex items-center justify-center w-full py-3 bg-rose-600 text-white font-black rounded-xl text-xs hover:bg-rose-500 transition-all gap-2">
@@ -927,34 +1020,52 @@ export default function HomePage() {
         );
       })()}
 
-      {/* 🚨 SOS MODAL (PNP, BFP, RESCUE /AMBULANCE) */}
-      {showSosModal && (
+      {/* 🚨 EMERGENCY REPORT MODAL */}
+      {showEmergencyModal && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
+          <div className="bg-slate-900 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-black text-white flex items-center gap-2"><Siren className="w-6 h-6 text-rose-500 animate-pulse" /> Hotlines</h2>
-              <button onClick={() => setShowSosModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Siren className="w-5 h-5 text-rose-500" /> Emergency Report</h2>
+              <button onClick={() => setShowEmergencyModal(false)} className="p-1 text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-sm text-rose-200 mb-4">Location: <span className="font-bold text-white">{selectedShed.name}</span></p>
-            {emergencyData ? (
-              <div className="space-y-3">
-                <a href={`tel:${emergencyData.pnp}`} className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-all group">
-                  <div className="flex items-center gap-3"><div className="p-2 bg-blue-950 text-blue-400 rounded-lg"><ShieldCheck className="w-5 h-5" /></div><div><p className="font-bold text-white text-sm">PNP {selectedShed.name}</p><p className="text-xs text-slate-400">{emergencyData.pnp}</p></div></div>
-                  <Phone className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
-                </a>
-                <a href={`tel:${emergencyData.bfp}`} className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-all group">
-                  <div className="flex items-center gap-3"><div className="p-2 bg-rose-950 text-rose-400 rounded-lg"><Flame className="w-5 h-5" /></div><div><p className="font-bold text-white text-sm">BFP {selectedShed.name}</p><p className="text-xs text-slate-400">{emergencyData.bfp}</p></div></div>
-                  <Phone className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
-                </a>
-                <a href={`tel:${emergencyData.rescue}`} className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-all group">
-                  <div className="flex items-center gap-3"><div className="p-2 bg-emerald-950 text-emerald-400 rounded-lg"><HeartPulse className="w-5 h-5" /></div><div><p className="font-bold text-white text-sm">RESCUE / AMBULANCE {selectedShed.name}</p><p className="text-xs text-slate-400">{emergencyData.rescue}</p></div></div>
-                  <Phone className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
-                </a>
-              </div>
-            ) : (<p className="text-center text-slate-400 py-4">Kinakarga ang contacts...</p>)}
-            <div className="mt-4 pt-4 border-t border-rose-800/50">
-              <a href="tel:911" className="flex items-center justify-center w-full py-3 bg-rose-600 text-white font-black rounded-xl shadow-lg hover:bg-rose-500 transition-all gap-2"><Siren className="w-5 h-5" /> CALL 911 (National)</a>
+            
+            <p className="text-xs text-slate-400 mb-4">Pumili ng uri ng emergency at kumuha ng litrato.</p>
+            
+            <select 
+              value={emergencyType} 
+              onChange={(e) => setEmergencyType(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-white mb-3 outline-none focus:border-rose-500"
+            >
+              <option value="">-- Pumili ng Emergency --</option>
+              <option value="Sunog">🔥 Sunog</option>
+              <option value="Aksidente">🚗 Aksidente</option>
+              <option value="Medical">🏥 Medical</option>
+              <option value="Baha">🌊 Baha</option>
+              <option value="Lindol">🌍 Lindol</option>
+              <option value="Holdap">🚔 Holdap / Crime</option>
+              <option value="Iba pa">📞 Iba pa</option>
+            </select>
+
+            <div className="mb-4">
+              <input 
+                type="file" 
+                accept="image/*" 
+                capture="environment"
+                onChange={handlePhotoUpload}
+                className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-rose-600/20 file:text-rose-400 hover:file:bg-rose-600/30"
+              />
+              {emergencyPhoto && (
+                <img src={emergencyPhoto} alt="Preview" className="w-full h-32 object-cover rounded-xl mt-3 border border-slate-700" />
+              )}
             </div>
+
+            <button 
+              onClick={handleEmergencySubmit}
+              disabled={isReportingEmergency}
+              className="w-full py-4 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-500 transition-all disabled:opacity-50"
+            >
+              {isReportingEmergency ? "Sending..." : "I-submit ang Report"}
+            </button>
           </div>
         </div>
       )}
