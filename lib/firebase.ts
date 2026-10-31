@@ -11,13 +11,13 @@ const firebaseConfig = {
   messagingSenderId: "751610479885",
   appId: "1:751610479885:web:5b5fb3b3e294211eb29c44",
 };
-// Initialize Firebase
+
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 export const database = getDatabase(app);
 export const auth = getAuth(app);
+export const db = database;
 
-// Function para hintayin ang login bago mag-save ng data
 export const ensureAuth = () => {
   return new Promise((resolve, reject) => {
     if (auth.currentUser) {
@@ -34,4 +34,3 @@ export const ensureAuth = () => {
       });
   });
 };
-export const db = database;
