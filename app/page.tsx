@@ -901,7 +901,7 @@ export default function HomePage() {
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-emerald-950 text-emerald-400 rounded-lg"><HeartPulse className="w-4 h-4" /></div>
                       <div>
-                        <p className="font-bold text-white text-xs">MDRRMO {nearestShed.name}</p>
+                        <p className="font-bold text-white text-xs">Rescue / Ambulance {nearestShed.name}</p>
                         <p className="text-[10px] text-slate-400">{currentEmergencyData.rescue}</p>
                       </div>
                     </div>
@@ -925,7 +925,7 @@ export default function HomePage() {
         );
       })()}
 
-      {/* 🚨 SOS MODAL (PNP, BFP, RESCUE) */}
+      {/* 🚨 SOS MODAL (PNP, BFP, RESCUE /AMBULANCE) */}
       {showSosModal && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
