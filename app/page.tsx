@@ -560,9 +560,9 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* 🚨 SOS FLOATING BUTTON */}
+            {/* 🚨 SOS FLOATING BUTTON */}
       <button 
-        onClick={triggerSOS} 
+        onClick={() => setShowSosModal(true)} // <--- DAPAT ITO, HINDI triggerSOS
         disabled={isBanned}
         className={`fixed bottom-24 right-6 z-50 p-4 rounded-full shadow-2xl transition-all flex items-center justify-center ${
           isBanned ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/50 animate-pulse'
