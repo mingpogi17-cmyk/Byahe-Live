@@ -987,7 +987,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* 🚨 SOS MODAL (PNP, BFP, RESCUE /AMBULANCE) */}
+            {/* 🚨 SOS MODAL (PNP, BFP, RESCUE /AMBULANCE) */}
       {showSosModal && (() => {
         let nearestShed = selectedShed;
         if (commuterLocation) {
@@ -1007,10 +1007,11 @@ export default function HomePage() {
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-rose-950 border border-rose-600 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-black text-white flex items-center gap-2"><Siren className="w-6 h-6 text-rose-500 animate-pulse" /> Hotlines</h2>
+              <h2 className="text-2xl font-black text-white flex items-center gap-2"><Siren className="w-6 h-6 text-rose-500 animate-pulse" /> Emergency Center</h2>
               <button onClick={() => setShowSosModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
             </div>
             <p className="text-sm text-rose-200 mb-4">Nearest Area: <span className="font-bold text-white">{nearestShed.name}</span></p>
+            
             {currentEmergencyData ? (
               <div className="space-y-3">
                 <a href={`tel:${currentEmergencyData.pnp}`} className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-all group">
@@ -1027,7 +1028,18 @@ export default function HomePage() {
                 </a>
               </div>
             ) : (<p className="text-center text-slate-400 py-4">Kinakarga ang contacts...</p>)}
-            <div className="mt-4 pt-4 border-t border-rose-800/50">
+            
+            <div className="mt-5 pt-4 border-t border-rose-800/50 space-y-2">
+              <p className="text-xs text-center text-rose-300 font-bold mb-2">O kaya, mag-send ng alert sa mga driver at LDRRMO:</p>
+              <button 
+                onClick={() => {
+                  setShowSosModal(false);
+                  triggerSOS();
+                }}
+                className="flex items-center justify-center w-full py-3 bg-amber-600 text-white font-black rounded-xl shadow-lg hover:bg-amber-500 transition-all gap-2"
+              >
+                <BellRing className="w-5 h-5" /> Send Silent SOS
+              </button>
               <a href="tel:911" className="flex items-center justify-center w-full py-3 bg-rose-600 text-white font-black rounded-xl shadow-lg hover:bg-rose-500 transition-all gap-2"><Siren className="w-5 h-5" /> CALL 911 (National)</a>
             </div>
           </div>
