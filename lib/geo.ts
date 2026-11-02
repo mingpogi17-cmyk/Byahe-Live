@@ -25,11 +25,12 @@ export const computeFare = (
   isAircon: boolean,
   discounted = false
 ): number => {
-  // 🚨 DITO ANG FIX: Sinabi natin na pwedeng kahit anong rate mula sa FARE_RATES ang gamitin
   let rate: { base: number; baseKm: number; perKm: number; name: string } = FARE_RATES.uvExpress;
   
+  // AYOS NA MAPPING DITO
   if (vehicleType === "Bus") rate = isAircon ? FARE_RATES.cityBusAircon : FARE_RATES.provincialBus;
-  else if (vehicleType === "Tricycle") rate = FARE_RATES.jeepney;
+  else if (vehicleType === "MiniBus") rate = FARE_RATES.minibus;
+  else if (vehicleType === "Tricycle") rate = FARE_RATES.tricycle; 
   else if (vehicleType === "Taxi") rate = FARE_RATES.cityBusOrdinary;
   else if (vehicleType === "Van") rate = FARE_RATES.uvExpress;
   else if (vehicleType === "Motor") rate = FARE_RATES.motor;
@@ -52,7 +53,6 @@ export const estimateEtaMinutes = (
   speedKmh?: number
 ): number | null => {
   if (!isFinite(distanceKm) || distanceKm < 0) return null;
-  // Default sa 25 km/h kung walang speed na binigay si driver
   const speed = speedKmh && speedKmh > 3 ? speedKmh : 25; 
   return Math.max(1, Math.round((distanceKm / speed) * 60));
 };

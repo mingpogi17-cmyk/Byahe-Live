@@ -7,7 +7,7 @@ import { ref, set, push, get } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic, Camera
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic, Camera, Volume2
 } from "lucide-react";
 
 import { SHEDS, STORAGE_KEYS, COOLDOWNS, TripData, Shed } from "@/lib/constants";
@@ -37,6 +37,7 @@ export default function HomePage() {
   const [showSosModal, setShowSosModal] = useState(false);
   const [showStandbyEmergencyModal, setShowStandbyEmergencyModal] = useState(false);
   const [showGcashModal, setShowGcashModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false); // NEW
   
   // 🚨 FEEDBACK STATES
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -48,6 +49,7 @@ export default function HomePage() {
   const [emergencyType, setEmergencyType] = useState("");
   const [emergencyPhoto, setEmergencyPhoto] = useState<string | null>(null);
   const [isReportingEmergency, setIsReportingEmergency] = useState(false);
+  const [emergencyLandmark, setEmergencyLandmark] = useState(""); // NEW
   
   // 🚨 VOICE-TO-TEXT STATES
   const [isListening, setIsListening] = useState(false);
@@ -395,6 +397,14 @@ export default function HomePage() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // SECURITY FIX: Max 5MB at Image Only
+      if (!file.type.startsWith("image/")) {
+        return toast("Image file lang ang pwede.", "error");
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        return toast("Sobra ang laki ng photo (max 5MB).", "error");
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setEmergencyPhoto(reader.result as string);
@@ -406,17 +416,28 @@ export default function HomePage() {
   const handleEmergencySubmit = async () => {
     if (!emergencyType) return toast("Pumili ng uri ng emergency.", "error");
     if (!emergencyPhoto) return toast("Kailangan ng litrato bilang ebidensya.", "error");
-    if (!commuterLocation) return toast("Hindi ma-detect ang GPS. I-on ang location.", "error");
+    if (!emergencyLandmark.trim()) return toast("Kailangan ng landmark para malaman namin ang exact spot.", "error");
 
     setIsReportingEmergency(true);
     try {
+      // GPS FALLBACK LOGIC
+      let lat = commuterLocation?.lat || selectedShed.lat;
+      let lng = commuterLocation?.lng || selectedShed.lng;
+      let locationSource = commuterLocation ? "gps" : "shed";
+
+      if (!commuterLocation) {
+        toast("Walang GPS — ginagamit ang shed location bilang reference.", "info");
+      }
+
       const newId = "inc_" + Date.now();
       await set(ref(database, `emergency_incidents/${newId}`), {
         id: newId,
         type: emergencyType,
         photo: emergencyPhoto,
-        lat: commuterLocation.lat,
-        lng: commuterLocation.lng,
+        lat: lat,
+        lng: lng,
+        locationSource: locationSource,
+        landmark: emergencyLandmark.trim(),
         timestamp: Date.now(),
         status: "pending",
         area: selectedShed.name,
@@ -426,6 +447,7 @@ export default function HomePage() {
       setShowEmergencyModal(false);
       setEmergencyPhoto(null);
       setEmergencyType("");
+      setEmergencyLandmark("");
     } catch (err) {
       toast("Error sa pag-report.", "error");
     } finally {
@@ -581,20 +603,13 @@ export default function HomePage() {
                 : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'
             }`}>
               <BellRing className={`w-6 h-6 ${isWaiting ? 'animate-pulse' : ''}`} /> 
-              {isWaiting ? "Kinansela" : "Naghihintay Ako"}
+              {isWaiting ? "Kanselahin (Cancel)" : "Naghihintay Ako"}
             </button>
             <button onClick={handleRequestStop} className="py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg">
               <Bell className="w-6 h-6" /> Bababa Ako
             </button>
           </div>
         </div>
-
-        <button 
-          onClick={() => setShowSleepAlarm(true)}
-          className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${sleepAlarmActive ? 'bg-indigo-500 text-white animate-pulse' : 'bg-slate-800 text-indigo-400 border border-indigo-900/50'}`}
-        >
-          <Bed className="w-5 h-5" /> {sleepAlarmActive ? `Pahinga Mode ON (${sleepDestination})` : "Sleep Alarm / Pahinga Mode"}
-        </button>
 
         <button 
           onClick={() => setShowEmergencyModal(true)}
@@ -633,26 +648,11 @@ export default function HomePage() {
               </div>
               <button onClick={() => setIsDiscounted(!isDiscounted)} className={`px-2 py-1 rounded text-[10px] font-bold ${isDiscounted ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-slate-400'}`}>{isDiscounted ? "ON" : "OFF"}</button>
             </div>
-            <div className="flex items-center justify-between bg-slate-800 p-2 rounded-lg">
-              <div className="flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                <div>
-                  <p className="text-[10px] font-bold text-white">Pocket Mode</p>
-                  <p className="text-[8px] text-slate-400">Shake to SOS OFF</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  const newMode = !isPocketMode;
-                  setIsPocketMode(newMode);
-                  localStorage.setItem("biyahe_pocket_mode", newMode.toString());
-                  toast(newMode ? "Pocket Mode ON. Shake to SOS disabled." : "Pocket Mode OFF. Shake to SOS active.", "info");
-                }} 
-                className={`px-2 py-1 rounded text-[10px] font-bold ${isPocketMode ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-400'}`}
-              >
-                {isPocketMode ? "ON" : "OFF"}
-              </button>
-            </div>
+            
+            {/* NEW SETTINGS BUTTON */}
+            <button onClick={() => setShowSettingsModal(true)} className="w-full py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+              <Settings className="w-3 h-3" /> App Settings & Profile
+            </button>
           </div>
         )}
 
@@ -782,6 +782,68 @@ export default function HomePage() {
         <p>Biyahe Live © 2026 · Developed by Ray Mar Olandria</p>
         <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline transition-colors">Privacy Policy & Terms of Service</Link>
       </footer>
+
+      {/* ⚙️ SETTINGS MODAL (Feature Creep Fix) */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Settings className="w-5 h-5 text-emerald-400" /> App Settings</h2>
+              <button onClick={() => setShowSettingsModal(false)} className="p-1 text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="space-y-3">
+              {/* SLEEP ALARM */}
+              <button 
+                onClick={() => { setShowSettingsModal(false); setShowSleepAlarm(true); }}
+                className={`w-full p-3 rounded-xl flex items-center justify-between border transition-all ${sleepAlarmActive ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/50' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
+              >
+                <div className="flex items-center gap-2">
+                  <Bed className="w-4 h-4" /> 
+                  <span className="text-sm font-bold">{sleepAlarmActive ? `Pahinga Mode ON (${sleepDestination})` : "Sleep Alarm / Pahinga Mode"}</span>
+                </div>
+                <ChevronDown className="w-4 h-4 -rotate-90" />
+              </button>
+
+              {/* POCKET MODE */}
+              <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <div>
+                    <p className="text-xs font-bold text-white">Pocket Mode</p>
+                    <p className="text-[10px] text-slate-400">Shake to SOS OFF</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    const newMode = !isPocketMode;
+                    setIsPocketMode(newMode);
+                    localStorage.setItem("biyahe_pocket_mode", newMode.toString());
+                    toast(newMode ? "Pocket Mode ON. Shake to SOS disabled." : "Pocket Mode OFF. Shake to SOS active.", "info");
+                  }} 
+                  className={`px-2 py-1 rounded text-[10px] font-bold ${isPocketMode ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-400'}`}
+                >
+                  {isPocketMode ? "ON" : "OFF"}
+                </button>
+              </div>
+
+              {/* INDEPENDENCE NOTICE */}
+              <div className="mt-4 pt-4 border-t border-slate-800 text-center">
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  <strong className="text-slate-400">Biyahe Live v1.0</strong><br/>
+                  Developed by <strong className="text-emerald-400">Ray Mar Olandria</strong><br/>
+                  <em className="text-[9px]">Public Safety Advocate | 3-Year Emergency Responder</em>
+                </p>
+                <p className="text-[9px] text-slate-600 mt-2 italic">
+                  Independence Notice: This is a private, independent application. It is NOT an official platform of the BFP, PNP, or any LGU. Not funded or endorsed by the government.
+                </p>
+              </div>
+            </div>
+
+            <button onClick={() => setShowSettingsModal(false)} className="w-full mt-4 py-3 bg-slate-800 text-white font-bold rounded-xl text-sm hover:bg-slate-700 transition-all">Close</button>
+          </div>
+        </div>
+      )}
 
       {/* 💡 SEND FEEDBACK MODAL */}
       {showFeedbackModal && (
@@ -1029,7 +1091,7 @@ export default function HomePage() {
               <button onClick={() => setShowEmergencyModal(false)} className="p-1 text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
             
-            <p className="text-xs text-slate-400 mb-4">Pumili ng uri ng emergency at kumuha ng litrato.</p>
+            <p className="text-xs text-slate-400 mb-4">Pumili ng uri ng emergency, lagay ng landmark, at kumuha ng litrato.</p>
             
             <select 
               value={emergencyType} 
@@ -1045,6 +1107,14 @@ export default function HomePage() {
               <option value="Holdap">🚔 Holdap / Crime</option>
               <option value="Iba pa">📞 Iba pa</option>
             </select>
+
+            <input 
+              type="text" 
+              value={emergencyLandmark} 
+              onChange={(e) => setEmergencyLandmark(e.target.value)}
+              placeholder="Landmark (e.g., Malapit sa Crossing, Tapat ng Mercury Drug)" 
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-white mb-3 outline-none focus:border-rose-500" 
+            />
 
             <div className="mb-4">
               <input 

@@ -5,6 +5,7 @@ export const FARE_RATES = {
   provincialBus: { base: 12, baseKm: 5, perKm: 2.2, name: "Provincial Bus" },
   cityBusOrdinary: { base: 15, baseKm: 5, perKm: 2.49, name: "City Bus (Ordinary)" },
   cityBusAircon: { base: 18, baseKm: 5, perKm: 2.97, name: "City Bus (Aircon)" },
+  minibus: { base: 15, baseKm: 5, perKm: 1.52, name: "Mini Bus (Aircon)" },
   uvExpress: { base: 0, baseKm: 0, perKm: 2.6, name: "UV Express" },
   motor: { base: 10, baseKm: 2, perKm: 1.5, name: "Motor (Habal-habal)" },
   tricycle: { base: 15, baseKm: 2, perKm: 3.0, name: "Tricycle" },

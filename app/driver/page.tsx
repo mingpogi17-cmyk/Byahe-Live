@@ -11,6 +11,7 @@ import {
 import { useUserId } from "@/lib/useUserId";
 import { useToast } from "@/components/Toast";
 import { getDistance } from "@/lib/geo";
+import { SHEDS } from "@/lib/constants"; // IMPORT PARA SA DROPDOWN
 
 export default function DriverDashboard() {
   const userId = useUserId();
@@ -24,6 +25,8 @@ export default function DriverDashboard() {
   const [seats, setSeats] = useState(14);
   const [earnings, setEarnings] = useState(0);
   const [fare, setFare] = useState(15);
+  const [destination, setDestination] = useState(""); 
+  const [reservedSeats, setReservedSeats] = useState(0);
   
   // EARNINGS SUMMARY STATE
   const [dailyEarnings, setDailyEarnings] = useState(0);
@@ -45,7 +48,7 @@ export default function DriverDashboard() {
   // Dynamic Seats logic
   const maxSeatsMap = { Van: 14, Bus: 49, MiniBus: 30, Taxi: 4, Tricycle: 6, Motor: 1 };
 
-  // 1. LOCAL STORAGE PERSISTENCE (Trip & Summary)
+  // 1. LOCAL STORAGE PERSISTENCE (Trip, Summary & Destination)
   useEffect(() => {
     const savedTrip = localStorage.getItem("biyahe_trip_active");
     if (savedTrip === "true") {
@@ -53,14 +56,22 @@ export default function DriverDashboard() {
     }
     const savedDailyEarnings = parseFloat(localStorage.getItem("biyahe_daily_earnings") || "0");
     const savedDailyPassengers = parseInt(localStorage.getItem("biyahe_daily_passengers") || "0");
+    const savedDest = localStorage.getItem("biyahe_destination"); 
+    
     setDailyEarnings(savedDailyEarnings);
     setDailyPassengers(savedDailyPassengers);
+    if (savedDest) setDestination(savedDest); 
     setIsMounted(true);
   }, []);
 
   useEffect(() => {
     localStorage.setItem("biyahe_current_fare", fare.toString());
   }, [fare]);
+
+  // Save Destination to Local Storage on change
+  useEffect(() => {
+    localStorage.setItem("biyahe_destination", destination);
+  }, [destination]);
 
   // 2. GLOBAL GPS TRACKER PARA SA ALERTS
   useEffect(() => {
@@ -89,7 +100,7 @@ export default function DriverDashboard() {
         Object.values(data).forEach((val: any) => {
           if (!val.expiresAt || Date.now() < val.expiresAt) {
             
-            // HYBRID LOGIC: Kung "Any" ang hinihintay, lahat makakaalam. Kung specific, dun lang sa kapareho.
+            // HYBRID LOGIC
             if (val.vehicleType && val.vehicleType !== "Any" && val.vehicleType !== vehicleType) {
               return; 
             }
@@ -201,8 +212,10 @@ export default function DriverDashboard() {
             const tripData = {
               tripId: userId,
               vehicleType,
+              destination: destination || "Unknown", // Naka-save na ang destination
               isAircon,
-              seatsAvailable: seats,
+              seatsAvailable: Math.max(0, seats - reservedSeats),
+              reservedSeats: reservedSeats,
               fare,
               status: seats > 0 ? "Available" : "Full",
               location: { lat: pos.coords.latitude, lng: pos.coords.longitude },
@@ -227,7 +240,7 @@ export default function DriverDashboard() {
     return () => {
       if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
     };
-  }, [isTripActive, userId, vehicleType, isAircon, seats, fare]);
+    }, [isTripActive, userId, vehicleType, isAircon, seats, fare, destination, reservedSeats]);
 
   const handleStartTrip = () => {
     setIsTripActive(true);
@@ -256,8 +269,8 @@ export default function DriverDashboard() {
 
       {showHarassmentAlert && (
         <div className="fixed top-0 left-0 right-0 z-[999] bg-rose-600 text-white p-4 shadow-2xl animate-in slide-in-from-top flex items-center justify-center gap-2">
-           <AlertTriangle className="w-5 h-5 animate-pulse" />
-           <p className="font-bold text-sm">HARASSMENT ALERT: Emergency inside vehicle!</p>
+          <AlertTriangle className="w-5 h-5 animate-pulse" />
+          <p className="font-bold text-sm">HARASSMENT ALERT: Emergency inside vehicle!</p>
         </div>
       )}
 
@@ -361,6 +374,26 @@ export default function DriverDashboard() {
           ))}
         </div>
 
+        {/* DESTINATION DROPDOWN */}
+        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+          <div className="flex items-center gap-2 mb-2">
+            <MapPin className="w-4 h-4 text-emerald-400" />
+            <p className="text-xs font-bold text-white">Saan ang Ruta? (Destination)</p>
+          </div>
+          <select
+            value={destination}
+            onChange={(e) => setDestination(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 appearance-none"
+          >
+            <option value="" disabled>-- Pumili ng Destinasyon --</option>
+            {SHEDS.map((shed) => (
+              <option key={shed.id} value={shed.name}>
+                {shed.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
             <p className="text-[10px] text-slate-500 font-bold tracking-wider">KITA</p>
@@ -395,13 +428,36 @@ export default function DriverDashboard() {
           </button>
         </div>
 
-        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
-          <button onClick={() => setSeats(Math.max(0, seats - 1))} className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl font-black text-slate-300 hover:bg-slate-700">-</button>
-          <div className="text-center">
-            <p className="text-[10px] text-slate-500 font-bold">AVAILABLE SEATS</p>
-            <p className={`text-4xl font-black ${seats === 0 ? 'text-rose-500' : seats <= 3 ? 'text-amber-500' : 'text-emerald-400'}`}>{seats}</p>
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <button onClick={() => setSeats(Math.max(0, seats - 1))} className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl font-black text-slate-300 hover:bg-slate-700">-</button>
+            <div className="text-center">
+              <p className="text-[10px] text-slate-500 font-bold">AVAILABLE SEATS</p>
+              <p className={`text-4xl font-black ${seats - reservedSeats <= 0 ? 'text-rose-500' : seats - reservedSeats <= 3 ? 'text-amber-500' : 'text-emerald-400'}`}>
+                {Math.max(0, seats - reservedSeats)}
+              </p>
+            </div>
+            <button onClick={() => setSeats(seats + 1)} className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl font-black text-slate-300 hover:bg-slate-700">+</button>
           </div>
-          <button onClick={() => setSeats(seats + 1)} className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl font-black text-slate-300 hover:bg-slate-700">+</button>
+          
+          {/* RESERVED SEATS TOGGLE */}
+          <div className="flex items-center justify-between bg-slate-900 p-2 rounded-lg border border-slate-800">
+            <div>
+              <p className="text-[10px] font-bold text-white">Reserve for Walk-ins</p>
+              <p className="text-[8px] text-slate-400">Para sa mga walang app</p>
+            </div>
+            <div className="flex gap-1">
+              {[0, 1, 2, 3].map(num => (
+                <button 
+                  key={num}
+                  onClick={() => setReservedSeats(num)}
+                  className={`w-6 h-6 rounded text-[10px] font-bold ${reservedSeats === num ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* MANUAL FARE ADD */}
@@ -412,7 +468,7 @@ export default function DriverDashboard() {
               type="number" 
               id="manualFareInput"
               placeholder="Amount (e.g. 15)" 
-              className="flex-1 bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white"
+              className="flex-1 bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white" 
             />
             <button 
               onClick={() => {
