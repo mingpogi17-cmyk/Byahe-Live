@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { database, auth } from "@/lib/firebase";
-import { ref, onValue, update, get } from "firebase/database"; // Idinagdag ang get
+import { ref, onValue, update, get, remove } from "firebase/database";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
-import { ShieldCheck, Flame, Siren, LogOut, MapPin, CheckCircle2, XCircle, Lock, Volume2, Clock, Activity, MessageSquare } from "lucide-react";
+import { ShieldCheck, Flame, Siren, LogOut, MapPin, CheckCircle2, XCircle, Lock, Volume2, Clock, Activity, MessageSquare, Trash2 } from "lucide-react";
 import { useToast } from "@/components/Toast";
 
 // LIVE TIMER COMPONENT
@@ -163,7 +163,7 @@ export default function LDRRMOPage() {
     }
   };
 
-  // UPDATED: May 3-Strikes Ban System na
+  // 3-STRIKES BAN SYSTEM
   const handleStatusChange = async (id: string, newStatus: "verified" | "dismissed" | "responding") => {
     try {
       if (newStatus === "dismissed") {
@@ -216,6 +216,24 @@ export default function LDRRMOPage() {
       toast("Note saved to dispatch log.", "success");
     } catch (error) {
       toast("Error saving note.", "error");
+    }
+  };
+
+  // CLEAR RESOLVED REPORTS
+  const handleClearResolved = async () => {
+    const confirmClear = window.confirm("Sigurado ka bang gusto mong burahin ang lahat ng VERIFIED at DISMISSED na reports?");
+    if (!confirmClear) return;
+
+    try {
+      const resolvedIncidents = incidents.filter(i => i.status === "verified" || i.status === "dismissed");
+      const deletePromises = resolvedIncidents.map(inc => 
+        remove(ref(database, `emergency_incidents/${inc.id}`))
+      );
+      await Promise.all(deletePromises);
+      toast("Nalinis na ang mga lumang reports!", "success");
+    } catch (error) {
+      console.error(error);
+      toast("Error sa paglinis ng reports.", "error");
     }
   };
 
@@ -286,10 +304,18 @@ export default function LDRRMOPage() {
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          {["All", "PNP", "BFP", "LDRRMO"].map((tab) => (
-            <button key={tab} onClick={() => setFilterType(tab as any)} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === tab ? 'bg-rose-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>{tab}</button>
-          ))}
+        <div className="flex justify-between items-center gap-2 overflow-x-auto pb-2">
+          <div className="flex gap-2">
+            {["All", "PNP", "BFP", "LDRRMO"].map((tab) => (
+              <button key={tab} onClick={() => setFilterType(tab as any)} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === tab ? 'bg-rose-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>{tab}</button>
+            ))}
+          </div>
+          <button 
+            onClick={handleClearResolved} 
+            className="whitespace-nowrap px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
+          >
+            <Trash2 className="w-3 h-3" /> Clear Resolved
+          </button>
         </div>
 
         <div className="space-y-4">
