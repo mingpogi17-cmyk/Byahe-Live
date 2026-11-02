@@ -6,8 +6,8 @@ import { database } from "@/lib/firebase";
 import { ref, set, push, get } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
-  RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic, Camera, Volume2
+  Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic, Camera, Volume2, AlertOctagon
 } from "lucide-react";
 
 import { SHEDS, STORAGE_KEYS, COOLDOWNS, TripData, Shed } from "@/lib/constants";
@@ -37,7 +37,7 @@ export default function HomePage() {
   const [showSosModal, setShowSosModal] = useState(false);
   const [showStandbyEmergencyModal, setShowStandbyEmergencyModal] = useState(false);
   const [showGcashModal, setShowGcashModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false); // NEW
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   
   // 🚨 FEEDBACK STATES
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -49,14 +49,15 @@ export default function HomePage() {
   const [emergencyType, setEmergencyType] = useState("");
   const [emergencyPhoto, setEmergencyPhoto] = useState<string | null>(null);
   const [isReportingEmergency, setIsReportingEmergency] = useState(false);
-  const [emergencyLandmark, setEmergencyLandmark] = useState(""); // NEW
+  const [emergencyLandmark, setEmergencyLandmark] = useState("");
   
   // 🚨 VOICE-TO-TEXT STATES
   const [isListening, setIsListening] = useState(false);
   const [reportText, setReportText] = useState("");
 
-  // 🚨 POCKET MODE STATE
+  // 🚨 POCKET MODE & BAN STATE
   const [isPocketMode, setIsPocketMode] = useState(false);
+  const [isBanned, setIsBanned] = useState(false);
   
   const [reportedTrips, setReportedTrips] = useState<{[key: string]: boolean}>({});
   const [isWaiting, setIsWaiting] = useState(false);
@@ -94,9 +95,19 @@ export default function HomePage() {
     const savedPocketMode = localStorage.getItem("biyahe_pocket_mode");
     if (savedPocketMode === "true") setIsPocketMode(true);
     
+    // BAN CHECK
+    if (userId) {
+      get(ref(database, `banned_users/${userId}`)).then((snap) => {
+        if (snap.exists() && snap.val().banned) {
+          setIsBanned(true);
+          toast("Your account has been suspended for fake reports.", "error");
+        }
+      });
+    }
+
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
-  }, []);
+  }, [userId, toast]);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -257,7 +268,7 @@ export default function HomePage() {
     };
 
     const handleMotion = (event: DeviceMotionEvent) => {
-      if (isPocketMode) return; 
+      if (isPocketMode || isBanned) return; 
       const acc = event.accelerationIncludingGravity;
       if (!acc) return;
       const x = acc.x || 0;
@@ -285,7 +296,7 @@ export default function HomePage() {
         window.removeEventListener("devicemotion", handleMotion);
       }
     };
-  }, [commuterLocation, selectedShed, userId, toast, isPocketMode]);
+  }, [commuterLocation, selectedShed, userId, toast, isPocketMode, isBanned]);
 
   const getMinutesAgo = (timestamp: number) => Math.max(0, Math.floor((now - timestamp) / 60000));
   
@@ -397,7 +408,6 @@ export default function HomePage() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // SECURITY FIX: Max 5MB at Image Only
       if (!file.type.startsWith("image/")) {
         return toast("Image file lang ang pwede.", "error");
       }
@@ -420,7 +430,6 @@ export default function HomePage() {
 
     setIsReportingEmergency(true);
     try {
-      // GPS FALLBACK LOGIC
       let lat = commuterLocation?.lat || selectedShed.lat;
       let lng = commuterLocation?.lng || selectedShed.lng;
       let locationSource = commuterLocation ? "gps" : "shed";
@@ -468,9 +477,7 @@ export default function HomePage() {
       recognition.interimResults = false;
       recognition.lang = "en-US"; 
 
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
+      recognition.onstart = () => setIsListening(true);
 
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
@@ -478,14 +485,8 @@ export default function HomePage() {
         setIsListening(false);
       };
 
-      recognition.onerror = (event: any) => {
-        console.error("Speech recognition error:", event.error);
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
 
       recognition.start();
     } catch (err) {
@@ -519,10 +520,12 @@ export default function HomePage() {
   const handleNextOnboard = () => { if (onboardStep < 2) setOnboardStep(prev => prev + 1); else handleFinishOnboarding(); };
 
   const triggerSOS = async () => {
+    if (isBanned) return toast("Cannot trigger SOS: Account suspended.", "error");
     try {
       await set(ref(database, "sos_alert"), { 
         id: "sos_" + Date.now(), 
         shed: selectedShed.name,
+        userId: userId || "anonymous",
         timestamp: Date.now() 
       });
       setShowSosModal(false);
@@ -551,10 +554,19 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 flex flex-col items-center relative">
       
+      {isBanned && (
+        <div className="w-full max-w-md bg-rose-600 text-white text-center py-2 rounded-xl mb-4 text-sm font-bold flex items-center justify-center gap-2">
+          <AlertOctagon className="w-4 h-4" /> Account Suspended for Fake Reports
+        </div>
+      )}
+
       {/* 🚨 SOS FLOATING BUTTON */}
       <button 
-        onClick={() => setShowSosModal(true)} 
-        className="fixed bottom-24 right-6 z-50 p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-600/50 transition-all flex items-center justify-center animate-pulse"
+        onClick={triggerSOS} 
+        disabled={isBanned}
+        className={`fixed bottom-24 right-6 z-50 p-4 rounded-full shadow-2xl transition-all flex items-center justify-center ${
+          isBanned ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/50 animate-pulse'
+        }`}
       >
         <Siren className="w-8 h-8" />
       </button>
@@ -612,10 +624,16 @@ export default function HomePage() {
         </div>
 
         <button 
-          onClick={() => setShowEmergencyModal(true)}
-          className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all bg-rose-600/20 text-rose-400 border border-rose-900/50 hover:bg-rose-600/30"
+          onClick={() => {
+            if (isBanned) return toast("Cannot report: Account suspended.", "error");
+            setShowEmergencyModal(true);
+          }}
+          disabled={isBanned}
+          className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+            isBanned ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' : 'bg-rose-600/20 text-rose-400 border border-rose-900/50 hover:bg-rose-600/30'
+          }`}
         >
-          <Camera className="w-5 h-5" /> Report Emergency (Photo)
+          <Camera className="w-5 h-5" /> {isBanned ? "Account Suspended" : "Report Emergency (Photo)"}
         </button>
 
         <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
@@ -649,7 +667,6 @@ export default function HomePage() {
               <button onClick={() => setIsDiscounted(!isDiscounted)} className={`px-2 py-1 rounded text-[10px] font-bold ${isDiscounted ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-slate-400'}`}>{isDiscounted ? "ON" : "OFF"}</button>
             </div>
             
-            {/* NEW SETTINGS BUTTON */}
             <button onClick={() => setShowSettingsModal(true)} className="w-full py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
               <Settings className="w-3 h-3" /> App Settings & Profile
             </button>
@@ -713,7 +730,15 @@ export default function HomePage() {
                     <div className="flex items-center gap-2.5">
                       <div className="p-2 bg-emerald-950/60 rounded-xl border border-emerald-800/40 text-emerald-400"><VehicleIcon className="w-5 h-5" /></div>
                       <div>
-                        <h2 className="font-bold text-base flex items-center gap-1.5">{trip.vehicleType || "Van"} {trip.plateNumber ? `#${trip.plateNumber}` : `#${trip.tripId.slice(-4).toUpperCase()}`}{trip.isVerified && <ShieldCheck className="w-4 h-4 text-blue-400" />}</h2>
+                        <h2 className="font-bold text-base flex items-center gap-1.5">
+                          {trip.vehicleType || "Van"} {trip.plateNumber ? `#${trip.plateNumber}` : `#${trip.tripId.slice(-4).toUpperCase()}`}
+                          {trip.isVerified && <ShieldCheck className="w-4 h-4 text-blue-400" />}
+                        </h2>
+                        {trip.destination && trip.destination !== "Unknown" && (
+                          <span className="text-[11px] text-blue-400 font-bold mb-0.5 block">
+                            🚐 Going to: {trip.destination}
+                          </span>
+                        )}
                         <span className="text-[11px] text-slate-400 flex items-center gap-1">
                           <MapPin className="w-3 h-3" /> {distance.toFixed(1)} km away 
                           {trip.speed !== undefined && trip.speed > 0 && ` • ${trip.speed} km/h`}
@@ -783,7 +808,7 @@ export default function HomePage() {
         <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline transition-colors">Privacy Policy & Terms of Service</Link>
       </footer>
 
-      {/* ⚙️ SETTINGS MODAL (Feature Creep Fix) */}
+      {/* ⚙️ SETTINGS MODAL */}
       {showSettingsModal && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -793,7 +818,6 @@ export default function HomePage() {
             </div>
 
             <div className="space-y-3">
-              {/* SLEEP ALARM */}
               <button 
                 onClick={() => { setShowSettingsModal(false); setShowSleepAlarm(true); }}
                 className={`w-full p-3 rounded-xl flex items-center justify-between border transition-all ${sleepAlarmActive ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/50' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
@@ -805,7 +829,6 @@ export default function HomePage() {
                 <ChevronDown className="w-4 h-4 -rotate-90" />
               </button>
 
-              {/* POCKET MODE */}
               <div className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -827,7 +850,6 @@ export default function HomePage() {
                 </button>
               </div>
 
-              {/* INDEPENDENCE NOTICE */}
               <div className="mt-4 pt-4 border-t border-slate-800 text-center">
                 <p className="text-[10px] text-slate-500 leading-relaxed">
                   <strong className="text-slate-400">Biyahe Live v1.0</strong><br/>
@@ -927,7 +949,6 @@ export default function HomePage() {
             </div>
             <p className="text-xs text-slate-400 mb-4">Pumili ng sitwasyon o mag-voice input sa waiting shed ngayon.</p>
 
-            {/* 🎤 VOICE INPUT SECTION */}
             <div className="mb-4 bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-2 text-center">
               <button
                 type="button"
@@ -1155,6 +1176,7 @@ export default function HomePage() {
               {Object.entries({
                 "Bus (Ordinary / Provincial)": "₱12 + ₱2.20/km",
                 "Bus (Aircon / City)": "₱18 + ₱2.97/km",
+                "Mini Bus (Aircon)": "₱15 + ₱2.52/km",
                 "UV Express (Van)": "₱2.60/km",
                 "Traditional Jeepney": "₱14 + ₱2.00/km",
                 "Modern Jeepney": "₱17 + ₱2.40/km",

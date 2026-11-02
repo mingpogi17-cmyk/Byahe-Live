@@ -35,23 +35,21 @@ export const SHEDS = [
 export type VehicleType = "Van" | "Bus" | "Taxi" | "Tricycle" | "Motor" | "MiniBus";
 export type TripStatus = "Available" | "Standing" | "Full";
 
-export interface TripData {
+export type TripData = {
   tripId: string;
-  status: TripStatus;
+  vehicleType?: string;
   location: { lat: number; lng: number };
+  status: "Available" | "Standing" | "Full";
   seatsAvailable?: number;
-  fare?: number;
-  isOutOfService?: boolean;
-  isEmergency?: boolean;
-  isGcashEnabled?: boolean;
-  vehicleType?: VehicleType;
-  isAircon?: boolean;
-  plateNumber?: string;
   speed?: number;
   updatedAt: number;
-  reports?: { correct: number; wrong: number };
+  isOutOfService?: boolean;
+  isAircon?: boolean;
   isVerified?: boolean;
-}
+  plateNumber?: string;
+  reports?: { correct: number; wrong: number };
+  destination?: string; // ✅ ETO YUNG DINAGDAG NATIN PARA MAWALA YUNG ERROR
+};
 
 export interface CommunityAlert {
   id: string;

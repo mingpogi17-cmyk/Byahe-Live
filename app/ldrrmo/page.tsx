@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { database, auth } from "@/lib/firebase";
-import { ref, onValue, update } from "firebase/database";
+import { ref, onValue, update, get } from "firebase/database"; // Idinagdag ang get
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
 import { ShieldCheck, Flame, Siren, LogOut, MapPin, CheckCircle2, XCircle, Lock, Volume2, Clock, Activity, MessageSquare } from "lucide-react";
 import { useToast } from "@/components/Toast";
@@ -43,10 +43,8 @@ export default function LDRRMOPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioPrimed, setAudioPrimed] = useState(false);
 
-  // State para sa Dispatch Notes
   const [noteInput, setNoteInput] = useState<{ [key: string]: string }>({});
 
-  // SMART ROUTING LOGIC
   const getResponders = (type: string) => {
     if (["Holdap", "Crime"].includes(type)) return ["PNP"];
     if (type === "Sunog") return ["BFP", "LDRRMO"]; 
@@ -109,9 +107,8 @@ export default function LDRRMOPage() {
       if (snapshot.exists()) {
         let rawData = Object.values(snapshot.val()) as any[];
         
-        // Voice alert logic (Bago i-sort para makuha yung pinakabago)
         if (rawData.length > prevIncidentCount.current && prevIncidentCount.current !== 0) {
-          rawData.sort((a, b) => b.timestamp - a.timestamp); // Sort newest first for alert
+          rawData.sort((a, b) => b.timestamp - a.timestamp); 
           const newIncident = rawData[0];
           if ('speechSynthesis' in window) {
             const msg = new SpeechSynthesisUtterance(`Attention: New ${newIncident.type} reported at ${newIncident.area || newIncident.landmark}`);
@@ -120,15 +117,14 @@ export default function LDRRMOPage() {
         }
         prevIncidentCount.current = rawData.length;
 
-        // SMART SORTING: Pending at Responding muna (Oldest to Newest), tapos Resolved/Dismissed
         rawData.sort((a, b) => {
           const aActive = ['pending', 'responding'].includes(a.status);
           const bActive = ['pending', 'responding'].includes(b.status);
           
           if (aActive && !bActive) return -1;
           if (!aActive && bActive) return 1;
-          if (aActive && bActive) return a.timestamp - b.timestamp; // Oldest first pag active
-          return b.timestamp - a.timestamp; // Newest first pag tapos na
+          if (aActive && bActive) return a.timestamp - b.timestamp;
+          return b.timestamp - a.timestamp; 
         });
 
         setIncidents(rawData);
@@ -167,8 +163,35 @@ export default function LDRRMOPage() {
     }
   };
 
+  // UPDATED: May 3-Strikes Ban System na
   const handleStatusChange = async (id: string, newStatus: "verified" | "dismissed" | "responding") => {
     try {
+      if (newStatus === "dismissed") {
+        const incidentRef = ref(database, `emergency_incidents/${id}`);
+        const snapshot = await get(incidentRef);
+        
+        if (snapshot.exists()) {
+          const incident = snapshot.val();
+          if (incident.userId && incident.userId !== "anonymous") {
+            const strikeRef = ref(database, `user_strikes/${incident.userId}`);
+            const strikeSnap = await get(strikeRef);
+            const currentStrikes = strikeSnap.exists() ? strikeSnap.val().count : 0;
+            const newStrikes = currentStrikes + 1;
+
+            await update(strikeRef, { count: newStrikes, lastStrike: Date.now() });
+
+            if (newStrikes >= 3) {
+              await update(ref(database, `banned_users/${incident.userId}`), { 
+                banned: true, 
+                reason: "3 Fake Emergency Reports",
+                bannedAt: Date.now()
+              });
+              toast("User ID has been banned for 3 fake reports.", "info");
+            }
+          }
+        }
+      }
+
       await update(ref(database, `emergency_incidents/${id}`), {
         status: newStatus,
         updatedAt: Date.now(),
@@ -180,7 +203,6 @@ export default function LDRRMOPage() {
     }
   };
 
-  // Save Dispatch Note
   const handleSaveNote = async (id: string) => {
     const noteText = noteInput[id];
     if (!noteText) return;
@@ -190,7 +212,7 @@ export default function LDRRMOPage() {
         noteUpdatedAt: Date.now(),
         noteUpdatedBy: email
       });
-      setNoteInput({ ...noteInput, [id]: "" }); // Clear input
+      setNoteInput({ ...noteInput, [id]: "" });
       toast("Note saved to dispatch log.", "success");
     } catch (error) {
       toast("Error saving note.", "error");
@@ -224,7 +246,6 @@ export default function LDRRMOPage() {
     return getResponders(inc.type).includes(filterType);
   });
 
-  // LIVE STATS
   const stats = {
     pending: filteredIncidents.filter(i => i.status === 'pending').length,
     responding: filteredIncidents.filter(i => i.status === 'responding').length,
@@ -235,7 +256,6 @@ export default function LDRRMOPage() {
     <div className="min-h-screen bg-slate-950 text-white p-6 pb-24">
       <div className="max-w-4xl mx-auto space-y-6">
         
-        {/* HEADER & AUDIO */}
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-black flex items-center gap-2"><Siren className="w-6 h-6 text-rose-500" /> Unified Command Center</h1>
@@ -251,7 +271,6 @@ export default function LDRRMOPage() {
           </div>
         </div>
 
-        {/* LIVE STATS BAR */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="bg-slate-900 border border-rose-900/50 p-3 rounded-xl text-center">
             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Pending</p>
@@ -267,14 +286,12 @@ export default function LDRRMOPage() {
           </div>
         </div>
 
-        {/* FILTER TABS */}
         <div className="flex gap-2 overflow-x-auto pb-2">
           {["All", "PNP", "BFP", "LDRRMO"].map((tab) => (
             <button key={tab} onClick={() => setFilterType(tab as any)} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === tab ? 'bg-rose-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>{tab}</button>
           ))}
         </div>
 
-        {/* INCIDENT CARDS */}
         <div className="space-y-4">
           {filteredIncidents.length === 0 ? (
             <div className="text-center py-12 text-slate-500">No incidents reported for this agency.</div>
@@ -313,7 +330,6 @@ export default function LDRRMOPage() {
                   <span className="text-xs text-slate-500">| Area: {inc.area || inc.landmark}</span>
                 </div>
 
-                {/* DISPATCH NOTE VIEWER */}
                 {inc.dispatchNote && (
                   <div className="bg-slate-900/80 border border-slate-700 p-3 rounded-xl mb-3 flex items-start gap-2">
                     <MessageSquare className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
@@ -324,7 +340,6 @@ export default function LDRRMOPage() {
                   </div>
                 )}
 
-                {/* ACTION BUTTONS */}
                 {inc.status === "pending" && (
                   <div className="space-y-3">
                     <div className="flex gap-2">
@@ -338,11 +353,10 @@ export default function LDRRMOPage() {
                         <XCircle className="w-4 h-4" /> Dismiss
                       </button>
                     </div>
-                    {/* DISPATCH NOTE INPUT */}
                     <div className="flex gap-2">
                       <input 
                         type="text" 
-                        placeholder="Add dispatch note (e.g., Truck 1 dispatched)..." 
+                        placeholder="Add dispatch note..." 
                         value={noteInput[inc.id] || ''} 
                         onChange={(e) => setNoteInput({ ...noteInput, [inc.id]: e.target.value })}
                         className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-emerald-500"
