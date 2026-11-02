@@ -6,7 +6,7 @@ const withPWA = withPWAInit({
   disable: process.env.NODE_ENV === "development",
   register: true,
   skipWaiting: true,
-} as any); // 🚨 Nilagyan natin ng "as any" para mawala ang TS error
+} as any);
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -14,7 +14,21 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   typescript: {
-    ignoreBuildErrors: true, // 🚨 Ito ang pipigil sa Vercel na mag-fail sa mga type errors
+    ignoreBuildErrors: true,
+  },
+  
+  // ✅ SECURITY HEADERS (Para kay Vercel)
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
   },
 };
 
