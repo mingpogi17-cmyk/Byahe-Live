@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -1167,6 +1168,15 @@ export default function HomePage() {
               <option value="Holdap">🚔 Holdap / Crime</option>
               <option value="Iba pa">📞 Iba pa</option>
             </select>
+
+            {/* IDINAGDAG NATIN PABALIK ANG LANDMARK INPUT */}
+            <input 
+              type="text" 
+              value={emergencyLandmark} 
+              onChange={(e) => setEmergencyLandmark(e.target.value)}
+              placeholder="Landmark (e.g., Malapit sa Crossing, Tapat ng Mercury Drug)" 
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-white mb-3 outline-none focus:border-rose-500" 
+            />
 
                         <div className="mb-4">
               <div className="grid grid-cols-2 gap-2 mb-3">
