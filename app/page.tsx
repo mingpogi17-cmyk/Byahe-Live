@@ -1180,7 +1180,6 @@ export default function HomePage() {
               <input 
                 type="file" 
                 accept="image/*" 
-                capture="environment"
                 onChange={handlePhotoUpload}
                 className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-rose-600/20 file:text-rose-400 hover:file:bg-rose-600/30"
               />
