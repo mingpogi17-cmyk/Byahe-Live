@@ -40,8 +40,11 @@ export default function LDRRMOPage() {
   const [filterType, setFilterType] = useState<"All" | "PNP" | "BFP" | "LDRRMO">("All");
   
   const prevIncidentCount = useRef(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioPrimed, setAudioPrimed] = useState(false);
+
+  // DALAWANG HIWALAY NA AUDIO REFS
+  const beepRef = useRef<HTMLAudioElement | null>(null);
+  const sirenRef = useRef<HTMLAudioElement | null>(null);
 
   const [noteInput, setNoteInput] = useState<{ [key: string]: string }>({});
 
@@ -61,14 +64,16 @@ export default function LDRRMOPage() {
   }, []);
 
   useEffect(() => {
-    audioRef.current = new Audio('/beep.mp3'); 
-    audioRef.current.loop = true;
+    // Init both audios
+    beepRef.current = new Audio('/beep.mp3');
+    beepRef.current.loop = true;
+    
+    sirenRef.current = new Audio('/siren.mp3');
+    sirenRef.current.loop = true;
+
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current = null;
-      }
+      if (beepRef.current) beepRef.current.pause();
+      if (sirenRef.current) sirenRef.current.pause();
     };
   }, []);
 
@@ -76,17 +81,6 @@ export default function LDRRMOPage() {
     try {
       const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
       await silentAudio.play();
-      if (audioRef.current) {
-        audioRef.current.volume = 0.5; 
-        await audioRef.current.play();
-        setTimeout(() => {
-          if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-            audioRef.current.volume = 1; 
-          }
-        }, 2000);
-      }
       setAudioPrimed(true);
       toast("Audio alert ready ✅", "success");
     } catch (e: any) {
@@ -136,20 +130,53 @@ export default function LDRRMOPage() {
     return () => unsub();
   }, [isAuthenticated]);
 
+  // SMART AUDIO LOGIC
   useEffect(() => {
-    if (!audioRef.current || !audioPrimed) return;
-    const pendingRelevantCount = incidents.filter((inc: any) => {
+    if (!audioPrimed) return;
+
+    const staCruzPending = incidents.filter((inc: any) => {
       if (inc.status !== 'pending') return false;
+      if (inc.area !== "Sta. Cruz") return false; 
       if (filterType === "All") return true;
       return getResponders(inc.type).includes(filterType);
-    }).length;
+    });
 
-    if (pendingRelevantCount > 0) {
-      audioRef.current.loop = true;
-      if (audioRef.current.paused) audioRef.current.play().catch((err) => console.warn('Audio blocked:', err));
+    const outsidePending = incidents.filter((inc: any) => {
+      if (inc.status !== 'pending') return false;
+      if (inc.area === "Sta. Cruz") return false;
+      if (filterType === "All") return true;
+      return getResponders(inc.type).includes(filterType);
+    });
+
+    const playAudio = (audio: HTMLAudioElement | null, shouldPlay: boolean, isLooping: boolean = true) => {
+      if (!audio) return;
+      if (shouldPlay) {
+        audio.loop = isLooping;
+        if (audio.paused) {
+          audio.play().catch(e => console.warn("Audio blocked", e));
+        }
+      } else {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    };
+
+    if (staCruzPending.length > 0) {
+      const hasFire = staCruzPending.some((inc: any) => inc.type === "Sunog");
+      
+      if (hasFire) {
+        playAudio(sirenRef.current, true, true);
+        playAudio(beepRef.current, false);
+      } else {
+        playAudio(beepRef.current, true, true);
+        playAudio(sirenRef.current, false);
+      }
+    } else if (outsidePending.length > 0) {
+      playAudio(beepRef.current, true, false);
+      playAudio(sirenRef.current, false);
     } else {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+      playAudio(beepRef.current, false);
+      playAudio(sirenRef.current, false);
     }
   }, [incidents, audioPrimed, filterType]);
 
@@ -163,7 +190,6 @@ export default function LDRRMOPage() {
     }
   };
 
-  // 3-STRIKES BAN SYSTEM
   const handleStatusChange = async (id: string, newStatus: "verified" | "dismissed" | "responding") => {
     try {
       if (newStatus === "dismissed") {
@@ -219,7 +245,6 @@ export default function LDRRMOPage() {
     }
   };
 
-  // CLEAR RESOLVED REPORTS
   const handleClearResolved = async () => {
     const confirmClear = window.confirm("Sigurado ka bang gusto mong burahin ang lahat ng VERIFIED at DISMISSED na reports?");
     if (!confirmClear) return;
@@ -351,9 +376,21 @@ export default function LDRRMOPage() {
                 
                 {inc.photo && <img src={inc.photo} alt="Incident" className="w-full h-48 object-cover rounded-xl mb-3 border border-slate-700" />}
                 
-                <div className="flex items-center gap-2 mb-4">
-                  <a href={`https://www.google.com/maps?q=${inc.lat},${inc.lng}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"><MapPin className="w-3 h-3" /> View on Map</a>
-                  <span className="text-xs text-slate-500">| Area: {inc.area || inc.landmark}</span>
+                <div className="flex flex-col gap-1 mb-4">
+                  <div className="flex items-center gap-2">
+                    <a href={`https://www.google.com/maps?q=${inc.lat},${inc.lng}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-bold"><MapPin className="w-3 h-3" /> View on Map</a>
+                    <span className="text-xs text-slate-500">| Area: {inc.area || "Unknown"}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    {inc.locationSource === "gps" ? (
+                      <span className="text-emerald-400">✅ GPS Exact Location</span>
+                    ) : (
+                      <span className="text-amber-400">⚠️ Shed Reference Only (No GPS)</span>
+                    )}
+                    {inc.landmark && (
+                      <span className="block mt-1 text-slate-300 italic">Landmark: "{inc.landmark}"</span>
+                    )}
+                  </div>
                 </div>
 
                 {inc.dispatchNote && (
