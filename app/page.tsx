@@ -1168,21 +1168,43 @@ export default function HomePage() {
               <option value="Iba pa">📞 Iba pa</option>
             </select>
 
-            <input 
-              type="text" 
-              value={emergencyLandmark} 
-              onChange={(e) => setEmergencyLandmark(e.target.value)}
-              placeholder="Landmark (e.g., Malapit sa Crossing, Tapat ng Mercury Drug)" 
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-white mb-3 outline-none focus:border-rose-500" 
-            />
+                        <div className="mb-4">
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <button 
+                  type="button"
+                  onClick={() => document.getElementById('cameraInput')?.click()}
+                  className="flex flex-col items-center justify-center gap-1 p-3 bg-rose-600/10 border border-rose-600/50 rounded-xl text-rose-400 font-bold text-xs hover:bg-rose-600/20 transition-all"
+                >
+                  <Camera className="w-5 h-5" />
+                  Take Photo
+                </button>
 
-            <div className="mb-4">
+                <button 
+                  type="button"
+                  onClick={() => document.getElementById('galleryInput')?.click()}
+                  className="flex flex-col items-center justify-center gap-1 p-3 bg-slate-800 border border-slate-700 rounded-xl text-slate-300 font-bold text-xs hover:bg-slate-700 transition-all"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                  Gallery
+                </button>
+              </div>
+
               <input 
                 type="file" 
+                id="cameraInput"
+                accept="image/*" 
+                capture="environment"
+                onChange={handlePhotoUpload}
+                className="hidden"
+              />
+              <input 
+                type="file" 
+                id="galleryInput"
                 accept="image/*" 
                 onChange={handlePhotoUpload}
-                className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-rose-600/20 file:text-rose-400 hover:file:bg-rose-600/30"
+                className="hidden"
               />
+
               {emergencyPhoto && (
                 <img src={emergencyPhoto} alt="Preview" className="w-full h-32 object-cover rounded-xl mt-3 border border-slate-700" />
               )}
