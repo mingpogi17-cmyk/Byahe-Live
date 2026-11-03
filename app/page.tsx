@@ -110,15 +110,19 @@ export default function HomePage() {
   }, [userId, toast]);
 
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.watchPosition(
-        (pos) => setCommuterLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        (err) => console.error("GPS error:", err),
-        { enableHighAccuracy: true }
-      );
+     // AUTO-SELECT NEAREST SHED
+  useEffect(() => {
+    if (commuterLocation && SHEDS.length > 0) {
+      let minDist = Infinity;
+      let nearest = SHEDS[0];
+      SHEDS.forEach(shed => {
+        const d = getDistance(commuterLocation.lat, commuterLocation.lng, shed.lat, shed.lng);
+        if (d < minDist) { minDist = d; nearest = shed; }
+      });
+      setSelectedShed(nearest);
     }
-  }, []);
-
+  }, [commuterLocation]);
+    
   // 🚨 AUTO WAITING PING
   useEffect(() => {
     if (!commuterLocation) return;
