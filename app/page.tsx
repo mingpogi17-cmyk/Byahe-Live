@@ -1,14 +1,13 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { database } from "@/lib/firebase";
-import { ref, set, push, get } from "firebase/database";
+import { ref, set, push, get, onValue } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic, Camera, Volume2, AlertOctagon
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic, Camera, Volume2, AlertOctagon, VolumeX
 } from "lucide-react";
 
 import { SHEDS, STORAGE_KEYS, COOLDOWNS, TripData, Shed } from "@/lib/constants";
@@ -52,6 +51,10 @@ export default function HomePage() {
   const [isReportingEmergency, setIsReportingEmergency] = useState(false);
   const [emergencyLandmark, setEmergencyLandmark] = useState("");
   
+  // 🚨 HELPS IS ON THE WAY TRACKER STATE
+  const [activeIncidentId, setActiveIncidentId] = useState<string | null>(null);
+  const [activeIncidentStatus, setActiveIncidentStatus] = useState<string | null>(null);
+
   // 🚨 VOICE-TO-TEXT STATES
   const [isListening, setIsListening] = useState(false);
   const [reportText, setReportText] = useState("");
@@ -83,6 +86,34 @@ export default function HomePage() {
   const [sleepAlarmActive, setSleepAlarmActive] = useState(false);
   const [sleepAlarmDistance, setSleepAlarmDistance] = useState<number>(1);
   const [commuterLocation, setCommuterLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [isUserActive, setIsUserActive] = useState(false); 
+
+  // FETCH BAN STATUS
+  useEffect(() => {
+    if (userId) {
+      get(ref(database, `banned_users/${userId}`)).then((snap) => {
+        if (snap.exists() && snap.val().banned) {
+          setIsBanned(true);
+          toast("Your account has been suspended for fake reports.", "error");
+        }
+      });
+    }
+  }, [userId, toast]);
+
+  // LISTEN TO ACTIVE INCIDENT STATUS
+  useEffect(() => {
+    if (!activeIncidentId) return;
+    const incidentRef = ref(database, `emergency_incidents/${activeIncidentId}`);
+    const unsub = onValue(incidentRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setActiveIncidentStatus(snapshot.val().status);
+      } else {
+        setActiveIncidentId(null);
+        setActiveIncidentStatus(null);
+      }
+    });
+    return () => unsub();
+  }, [activeIncidentId]);
 
   useEffect(() => {
     const savedPoints = localStorage.getItem(STORAGE_KEYS.points);
@@ -96,19 +127,9 @@ export default function HomePage() {
     const savedPocketMode = localStorage.getItem("biyahe_pocket_mode");
     if (savedPocketMode === "true") setIsPocketMode(true);
     
-    // BAN CHECK
-    if (userId) {
-      get(ref(database, `banned_users/${userId}`)).then((snap) => {
-        if (snap.exists() && snap.val().banned) {
-          setIsBanned(true);
-          toast("Your account has been suspended for fake reports.", "error");
-        }
-      });
-    }
-
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
-  }, [userId, toast]);
+  }, []);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -135,7 +156,7 @@ export default function HomePage() {
 
   // 🚨 AUTO WAITING PING
   useEffect(() => {
-    if (!commuterLocation) return;
+    if (!commuterLocation || isUserActive) return;
     const distanceToShed = getDistance(commuterLocation.lat, commuterLocation.lng, selectedShed.lat, selectedShed.lng);
     const isNearShed = distanceToShed <= 0.05;
     
@@ -146,7 +167,7 @@ export default function HomePage() {
       cancelWaitingPing();
       setIsWaiting(false);
     }
-  }, [commuterLocation, selectedShed, isWaiting, sendWaitingPing, cancelWaitingPing, waitingVehicle]);
+  }, [commuterLocation, selectedShed, isWaiting, sendWaitingPing, cancelWaitingPing, waitingVehicle, isUserActive]);
 
   useEffect(() => {
     const savedShedId = localStorage.getItem(STORAGE_KEYS.favoriteShed);
@@ -453,14 +474,30 @@ export default function HomePage() {
 
   const handleEmergencySubmit = async () => {
     if (!emergencyType) return toast("Pumili ng uri ng emergency.", "error");
-    if (!emergencyPhoto) return toast("Kailangan ng litrato bilang ebidensya.", "error");
+    // PHOTO IS NOW OPTIONAL
+    // if (!emergencyPhoto) return toast("Kailangan ng litrato bilang ebidensya.", "error");
     if (!emergencyLandmark.trim()) return toast("Kailangan ng landmark para malaman namin ang exact spot.", "error");
 
     setIsReportingEmergency(true);
+    setIsUserActive(true); 
+
     try {
       let lat = commuterLocation?.lat || selectedShed.lat;
       let lng = commuterLocation?.lng || selectedShed.lng;
       let locationSource = commuterLocation ? "gps" : "shed";
+
+      // AUTO-DETECT NEAREST TOWN PARA SA AREA
+      let detectedArea = selectedShed.name;
+      if (commuterLocation && SHEDS.length > 0) {
+        let minDist = Infinity;
+        SHEDS.forEach(shed => {
+          const d = getDistance(lat, lng, shed.lat, shed.lng);
+          if (d < minDist) {
+            minDist = d;
+            detectedArea = shed.name;
+          }
+        });
+      }
 
       if (!commuterLocation) {
         toast("Walang GPS — ginagamit ang shed location bilang reference.", "info");
@@ -470,17 +507,21 @@ export default function HomePage() {
       await set(ref(database, `emergency_incidents/${newId}`), {
         id: newId,
         type: emergencyType,
-        photo: emergencyPhoto,
+        photo: emergencyPhoto, // Pwedeng null na ito ngayon
         lat: lat,
         lng: lng,
         locationSource: locationSource,
         landmark: emergencyLandmark.trim(),
         timestamp: Date.now(),
         status: "pending",
-        area: selectedShed.name,
+        area: detectedArea,
         userId: userId || "anonymous"
       });
-      toast("Emergency reported! Responders have been alerted.", "success");
+      
+      setActiveIncidentId(newId);
+      setActiveIncidentStatus("pending");
+      
+      toast("✅ Emergency Reported! Waiting for LDRRMO response.", "success");
       setShowEmergencyModal(false);
       setEmergencyPhoto(null);
       setEmergencyType("");
@@ -489,6 +530,7 @@ export default function HomePage() {
       toast("Error sa pag-report.", "error");
     } finally {
       setIsReportingEmergency(false);
+      setTimeout(() => setIsUserActive(false), 5000); 
     }
   };
 
@@ -582,6 +624,26 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 flex flex-col items-center relative">
       
+      {/* 🚨 HELP IS ON THE WAY BANNER */}
+      {activeIncidentId && activeIncidentStatus && (
+        <div className={`w-full max-w-md mb-4 px-4 py-3 rounded-xl border shadow-lg flex items-center justify-between animate-in slide-in-from-top-2 ${
+          activeIncidentStatus === 'pending' ? 'bg-rose-950/90 border-rose-600 text-rose-200 animate-pulse' : 
+          activeIncidentStatus === 'responding' ? 'bg-blue-950/90 border-blue-600 text-blue-200' : 
+          'bg-emerald-950/90 border-emerald-600 text-emerald-200'
+        }`}>
+          <div className="flex items-center gap-2 font-bold text-sm">
+            {activeIncidentStatus === 'pending' ? (
+              <><AlertTriangle className="w-5 h-5" /> Waiting for LDRRMO response...</>
+            ) : activeIncidentStatus === 'responding' ? (
+              <><Siren className="w-5 h-5 animate-pulse" /> HELP IS ON THE WAY! LDRRMO is responding.</>
+            ) : (
+              <><CheckCircle2 className="w-5 h-5" /> Responders have arrived.</>
+            )}
+          </div>
+          <button onClick={() => { setActiveIncidentId(null); setActiveIncidentStatus(null); }} className="p-1 hover:bg-black/20 rounded-full transition"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
       {isBanned && (
         <div className="w-full max-w-md bg-rose-600 text-white text-center py-2 rounded-xl mb-4 text-sm font-bold flex items-center justify-center gap-2">
           <AlertOctagon className="w-4 h-4" /> Account Suspended for Fake Reports
@@ -654,6 +716,7 @@ export default function HomePage() {
         <button 
           onClick={() => {
             if (isBanned) return toast("Cannot report: Account suspended.", "error");
+            setIsUserActive(true); 
             setShowEmergencyModal(true);
           }}
           disabled={isBanned}
@@ -1160,16 +1223,33 @@ export default function HomePage() {
               className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-white mb-3 outline-none focus:border-rose-500"
             >
               <option value="">-- Pumili ng Emergency --</option>
-              <option value="Sunog">🔥 Sunog</option>
-              <option value="Aksidente">🚗 Aksidente</option>
-              <option value="Medical">🏥 Medical</option>
-              <option value="Baha">🌊 Baha</option>
-              <option value="Lindol">🌍 Lindol</option>
-              <option value="Holdap">🚔 Holdap / Crime</option>
-              <option value="Iba pa">📞 Iba pa</option>
+              
+              <optgroup label="🔥 Sunog at Kalamidad (BFP / LDRRMO)">
+                <option value="Sunog">🔥 Sunog</option>
+                <option value="Lindol">🌍 Lindol</option>
+                <option value="Baha">🌧️ Baha</option>
+                <option value="Landslide">⛰️ Pagguho ng Lupa</option>
+              </optgroup>
+
+              <optgroup label="🚑 Medikal at Rescue (LDRRMO)">
+                <option value="Aksidente">🚗 Aksidente</option>
+                <option value="Medical">🏥 Medical (Sakit / Atake)</option>
+                <option value="Nalunod">🌊 Nalunod (Drowning)</option>
+                <option value="Animal Bite">🐕 Kagat ng Aso/Ahas</option>
+                <option value="Kuryente">⚡ Electrocution</option>
+              </optgroup>
+
+              <optgroup label="🚓 Krimen at Seguridad (PNP)">
+                <option value="Pamamaril">🚔 Pamamaril / Pananaksak</option>
+                <option value="Holdap">🚨 Holdap / Pagnanakaw</option>
+                <option value="Away Pamilya">🏠 Away Pamilya (Domestic)</option>
+              </optgroup>
+
+              <optgroup label="Iba pa">
+                <option value="Iba pa">📞 Iba pa</option>
+              </optgroup>
             </select>
 
-            {/* IDINAGDAG NATIN PABALIK ANG LANDMARK INPUT */}
             <input 
               type="text" 
               value={emergencyLandmark} 
@@ -1178,7 +1258,7 @@ export default function HomePage() {
               className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-white mb-3 outline-none focus:border-rose-500" 
             />
 
-                        <div className="mb-4">
+            <div className="mb-4">
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <button 
                   type="button"
