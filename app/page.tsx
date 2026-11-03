@@ -6,7 +6,7 @@ import { database } from "@/lib/firebase";
 import { ref, set, push, get } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
-  Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
+  RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
   Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic, Camera, Volume2, AlertOctagon
 } from "lucide-react";
 
@@ -110,7 +110,16 @@ export default function HomePage() {
   }, [userId, toast]);
 
   useEffect(() => {
-     // AUTO-SELECT NEAREST SHED
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(
+        (pos) => setCommuterLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => console.error("GPS error:", err),
+        { enableHighAccuracy: true }
+      );
+    }
+  }, []);
+
+  // AUTO-SELECT NEAREST SHED
   useEffect(() => {
     if (commuterLocation && SHEDS.length > 0) {
       let minDist = Infinity;
@@ -122,7 +131,7 @@ export default function HomePage() {
       setSelectedShed(nearest);
     }
   }, [commuterLocation]);
-    
+
   // 🚨 AUTO WAITING PING
   useEffect(() => {
     if (!commuterLocation) return;
@@ -421,7 +430,21 @@ export default function HomePage() {
 
       const reader = new FileReader();
       reader.onloadend = () => {
-        setEmergencyPhoto(reader.result as string);
+        const img = new Image();
+        img.src = reader.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const scaleSize = MAX_WIDTH / img.width;
+          canvas.width = MAX_WIDTH;
+          canvas.height = img.height * scaleSize;
+
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+          
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+          setEmergencyPhoto(compressedBase64);
+        };
       };
       reader.readAsDataURL(file);
     }
@@ -564,9 +587,9 @@ export default function HomePage() {
         </div>
       )}
 
-            {/* 🚨 SOS FLOATING BUTTON */}
+      {/* 🚨 SOS FLOATING BUTTON */}
       <button 
-        onClick={() => setShowSosModal(true)} // <--- DAPAT ITO, HINDI triggerSOS
+        onClick={() => setShowSosModal(true)} 
         disabled={isBanned}
         className={`fixed bottom-24 right-6 z-50 p-4 rounded-full shadow-2xl transition-all flex items-center justify-center ${
           isBanned ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/50 animate-pulse'
@@ -991,7 +1014,7 @@ export default function HomePage() {
         </div>
       )}
 
-            {/* 🚨 SOS MODAL (PNP, BFP, RESCUE /AMBULANCE) */}
+      {/* 🚨 SOS MODAL (PNP, BFP, RESCUE /AMBULANCE) */}
       {showSosModal && (() => {
         let nearestShed = selectedShed;
         if (commuterLocation) {
