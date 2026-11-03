@@ -64,7 +64,6 @@ export default function LDRRMOPage() {
   }, []);
 
   useEffect(() => {
-    // Init both audios
     beepRef.current = new Audio('/beep.mp3');
     beepRef.current.loop = true;
     
@@ -376,20 +375,35 @@ export default function LDRRMOPage() {
                 
                 {inc.photo && <img src={inc.photo} alt="Incident" className="w-full h-48 object-cover rounded-xl mb-3 border border-slate-700" />}
                 
-                <div className="flex flex-col gap-1 mb-4">
+                <div className="flex flex-col gap-2 mb-4">
                   <div className="flex items-center gap-2">
                     <a href={`https://www.google.com/maps?q=${inc.lat},${inc.lng}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-bold"><MapPin className="w-3 h-3" /> View on Map</a>
                     <span className="text-xs text-slate-500">| Area: {inc.area || "Unknown"}</span>
                   </div>
-                  <div className="text-[11px] text-slate-400">
-                    {inc.locationSource === "gps" ? (
-                      <span className="text-emerald-400">✅ GPS Exact Location</span>
-                    ) : (
-                      <span className="text-amber-400">⚠️ Shed Reference Only (No GPS)</span>
-                    )}
-                    {inc.landmark && (
-                      <span className="block mt-1 text-slate-300 italic">Landmark: "{inc.landmark}"</span>
-                    )}
+                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                    <div>
+                      {inc.locationSource === "gps" ? (
+                        <span className="text-emerald-400">✅ GPS Exact Location</span>
+                      ) : (
+                        <span className="text-amber-400">⚠️ Shed Reference Only (No GPS)</span>
+                      )}
+                      {inc.landmark && (
+                        <span className="block mt-1 text-slate-300 italic">Landmark: "{inc.landmark}"</span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* STATIC MAP PREVIEW PARA SA ANTI-SCAM */}
+                  <div className="w-full h-32 rounded-xl overflow-hidden border border-slate-700 mt-1">
+                    <iframe 
+                      width="100%" 
+                      height="100%" 
+                      frameBorder="0" 
+                      scrolling="no" 
+                      marginHeight={0} 
+                      marginWidth={0} 
+                      src={`https://maps.google.com/maps?q=${inc.lat},${inc.lng}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                    ></iframe>
                   </div>
                 </div>
 
