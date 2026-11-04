@@ -31,6 +31,7 @@ export default function HomePage() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [showShedDropdown, setShowShedDropdown] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [isEmergencyEnabled, setIsEmergencyEnabled] = useState(false); // Palitan ng true kapag approved na
   
   const [alarms, setAlarms] = useState<{[key: string]: number}>({});
   const [points, setPoints] = useState(0);
@@ -342,24 +343,17 @@ export default function HomePage() {
 
   const handleManualWaitingPing = () => {
     if (isWaiting) {
+      // Idagdag itong check na ito para hindi ma-spam
+      if ((window as any)._isCancelling) return;
+      (window as any)._isCancelling = true;
+      
       cancelWaitingPing();
       setIsWaiting(false);
       toast("Kinansela ang paghihintay.", "info");
+      
+      setTimeout(() => { (window as any)._isCancelling = false; }, 2000);
       return;
     }
-
-    const lat = commuterLocation?.lat || selectedShed.lat;
-    const lng = commuterLocation?.lng || selectedShed.lng;
-
-    let nearestShedName = selectedShed.name;
-    let minDist = Infinity;
-    SHEDS.forEach(s => {
-      const d = getDistance(lat, lng, s.lat, s.lng);
-      if (d < minDist) {
-        minDist = d;
-        nearestShedName = s.name;
-      }
-    });
 
     sendWaitingPing(lat, lng, waitingVehicle, nearestShedName);
     setIsWaiting(true);
@@ -713,19 +707,21 @@ export default function HomePage() {
           </div>
         </div>
 
-        <button 
-          onClick={() => {
-            if (isBanned) return toast("Cannot report: Account suspended.", "error");
-            setIsUserActive(true); 
-            setShowEmergencyModal(true);
-          }}
-          disabled={isBanned}
-          className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-            isBanned ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' : 'bg-rose-600/20 text-rose-400 border border-rose-900/50 hover:bg-rose-600/30'
-          }`}
-        >
-          <Camera className="w-5 h-5" /> {isBanned ? "Account Suspended" : "Report Emergency (Photo)"}
-        </button>
+       {isEmergencyEnabled && (
+  <button
+    onClick={() => {
+      if (isBanned) return toast("Cannot report: Account suspended.", "error");
+      setIsUserActive(true);
+      setShowEmergencyModal(true);
+    }}
+    disabled={isBanned}
+    className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+      isBanned ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' : 'bg-rose-600/20 text-rose-400 border border-rose-900/50 hover:bg-rose-600/30'
+    }`}
+  >
+    <Camera className="w-5 h-5" /> {isBanned ? "Account Suspended" : "Report Emergency (Photo)"}
+  </button>
+)}
 
         <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
           <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">More Options</span>
