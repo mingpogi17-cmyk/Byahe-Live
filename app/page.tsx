@@ -7,7 +7,7 @@ import { ref, set, push, get, onValue } from "firebase/database";
 import { 
   Bus, MapPin, Clock, WifiOff, AlertTriangle, Navigation, 
   RefreshCw, Megaphone, X, CheckCircle2, Star, ChevronDown, ShieldCheck,
-  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic, Camera, Volume2, AlertOctagon, VolumeX
+  Share2, Bell, BellRing, Wallet, Siren, Award, Search, Phone, Flame, HeartPulse, Car, Users, Bed, Settings, Timer, Coffee, MessageSquare, Mic, Camera, Volume2, AlertOctagon, VolumeX, Ticket
 } from "lucide-react";
 
 import { SHEDS, STORAGE_KEYS, COOLDOWNS, TripData, Shed } from "@/lib/constants";
