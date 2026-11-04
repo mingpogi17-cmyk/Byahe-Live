@@ -8,39 +8,44 @@ import { useToast } from "@/components/Toast";
 export default function ScanPage() {
   const { toast } = useToast();
   const [scanResult, setScanResult] = useState<string | null>(null);
+  const [scanner, setScanner] = useState<any>(null);
 
   useEffect(() => {
-    // I-load ang scanner library dynamically (client-side only)
-    let scanner: any;
+    let html5QrCode: any;
 
     const initScanner = async () => {
-      const { Html5QrcodeScanner } = await import("html5-qrcode");
+      const { Html5Qrcode } = await import("html5-qrcode");
+      html5QrCode = new Html5Qrcode("reader");
+      setScanner(html5QrCode);
 
-      scanner = new Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        /* verbose= */ false
-      );
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
-      scanner.render(
-        (decodedText: string) => {
-          // 🚨 PAGKA-SCAN, I-STOP ANG CAMERA AT IPAKITA ANG RESULT
-          setScanResult(decodedText);
-          scanner.clear();
-          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-          toast("Ticket Scanned Successfully!", "success");
-        },
-        (error: any) => {
-          // Huwag pansinin ang bawat failed scan (normal lang yun habang naghahanap)
-        }
-      );
+      try {
+        await html5QrCode.start(
+          { facingMode: "environment" }, // Auto rear camera
+          config,
+          (decodedText: string) => {
+            // 🚨 PAGKA-SCAN
+            setScanResult(decodedText);
+            html5QrCode.pause(); // Pause muna para hindi mag-spam
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            toast("Ticket Scanned Successfully!", "success");
+          },
+          (errorMessage: any) => {
+            // Ignore error frames
+          }
+        );
+      } catch (err) {
+        console.error("Camera start error:", err);
+        toast("Camera access denied or not available.", "error");
+      }
     };
 
     initScanner();
 
     return () => {
-      if (scanner) {
-        scanner.clear().catch((err: any) => console.error("Failed to clear scanner", err));
+      if (html5QrCode) {
+        html5QrCode.stop().then(() => html5QrCode.clear()).catch((err: any) => console.log(err));
       }
     };
   }, [toast]);
@@ -64,7 +69,7 @@ export default function ScanPage() {
 
           {/* 🚨 DITO LALABAS ANG CAMERA */}
           {!scanResult ? (
-            <div id="reader" className="w-full rounded-xl overflow-hidden border border-slate-700 bg-black min-h-[250px]"></div>
+            <div id="reader" className="w-full rounded-xl overflow-hidden border-2 border-emerald-500/50 bg-black min-h-[300px]"></div>
           ) : (
             <div className="bg-emerald-950/50 border border-emerald-500/50 p-6 rounded-xl space-y-3 animate-in zoom-in">
               <CheckCircle2 className="w-16 h-16 text-emerald-400 mx-auto" />
@@ -73,7 +78,12 @@ export default function ScanPage() {
                 {scanResult}
               </p>
               <button 
-                onClick={() => setScanResult(null)} // Reset para maka-scan ulit
+                onClick={() => {
+                  setScanResult(null);
+                  if (scanner) {
+                    scanner.resume(); // Resume camera scanning
+                  }
+                }}
                 className="w-full mt-4 py-3 bg-emerald-500 text-slate-950 font-black rounded-xl text-sm hover:bg-emerald-400 transition-all"
               >
                 Scan Another Ticket
