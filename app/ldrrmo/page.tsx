@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { database, auth } from "@/lib/firebase";
 import { ref, onValue, update, get, remove } from "firebase/database";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
-import { ShieldCheck, Flame, Siren, LogOut, MapPin, CheckCircle2, XCircle, Lock, Volume2, Clock, Activity, MessageSquare, Trash2 } from "lucide-react";
+import { ShieldCheck, Flame, Siren, LogOut, MapPin, CheckCircle2, XCircle, Lock, Volume2, Clock, Activity, MessageSquare, Trash2, BarChart3 } from "lucide-react";
 import { useToast } from "@/components/Toast";
 
 // LIVE TIMER COMPONENT
@@ -39,19 +39,22 @@ export default function LDRRMOPage() {
   const [incidents, setIncidents] = useState<any[]>([]);
   const [filterType, setFilterType] = useState<"All" | "PNP" | "BFP" | "LDRRMO">("All");
   
+  // NEW STATES: DUTY STATUS & ANALYTICS
+  const [isOnDuty, setIsOnDuty] = useState(false); 
+  const [showAnalytics, setShowAnalytics] = useState(false);
+
   const prevIncidentCount = useRef(0);
   const [audioPrimed, setAudioPrimed] = useState(false);
 
-  // DALAWANG HIWALAY NA AUDIO REFS
   const beepRef = useRef<HTMLAudioElement | null>(null);
   const sirenRef = useRef<HTMLAudioElement | null>(null);
 
   const [noteInput, setNoteInput] = useState<{ [key: string]: string }>({});
 
   const getResponders = (type: string) => {
-    if (["Holdap", "Crime"].includes(type)) return ["PNP"];
+    if (["Pamamaril", "Holdap", "Away Pamilya", "Crime"].includes(type)) return ["PNP"];
     if (type === "Sunog") return ["BFP", "LDRRMO"]; 
-    if (["Aksidente", "Medical"].includes(type)) return ["LDRRMO", "BFP"]; 
+    if (["Aksidente", "Medical", "Nalunod", "Animal Bite", "Kuryente"].includes(type)) return ["LDRRMO", "BFP"]; 
     return ["LDRRMO"];
   };
 
@@ -135,14 +138,14 @@ export default function LDRRMOPage() {
 
     const staCruzPending = incidents.filter((inc: any) => {
       if (inc.status !== 'pending') return false;
-      if (inc.area !== "Sta. Cruz") return false; 
+      if (inc.area !== "Sta. Cruz" && inc.area !== "Santa Cruz") return false; 
       if (filterType === "All") return true;
       return getResponders(inc.type).includes(filterType);
     });
 
     const outsidePending = incidents.filter((inc: any) => {
       if (inc.status !== 'pending') return false;
-      if (inc.area === "Sta. Cruz") return false;
+      if (inc.area === "Sta. Cruz" || inc.area === "Santa Cruz") return false;
       if (filterType === "All") return true;
       return getResponders(inc.type).includes(filterType);
     });
@@ -190,6 +193,8 @@ export default function LDRRMOPage() {
   };
 
   const handleStatusChange = async (id: string, newStatus: "verified" | "dismissed" | "responding") => {
+    if (!isOnDuty) return toast("You are on STANDBY. Toggle ON DUTY to take action.", "error");
+    
     try {
       if (newStatus === "dismissed") {
         const incidentRef = ref(database, `emergency_incidents/${id}`);
@@ -261,6 +266,25 @@ export default function LDRRMOPage() {
     }
   };
 
+  // ANALYTICS CALCULATION
+  const calculateAnalytics = () => {
+    const total = incidents.length;
+    const resolved = incidents.filter(i => i.status === 'verified').length;
+    const dismissed = incidents.filter(i => i.status === 'dismissed').length;
+    const pending = incidents.filter(i => i.status === 'pending' || i.status === 'responding').length;
+    
+    const verifiedIncidents = incidents.filter(i => i.status === 'verified' && i.updatedAt && i.timestamp);
+    let avgResponseTime = 0;
+    if (verifiedIncidents.length > 0) {
+      const totalTime = verifiedIncidents.reduce((acc, inc) => acc + (inc.updatedAt - inc.timestamp), 0);
+      avgResponseTime = Math.floor(totalTime / verifiedIncidents.length / 60000);
+    }
+
+    return { total, resolved, dismissed, pending, avgResponseTime };
+  };
+
+  const statsData = calculateAnalytics();
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
@@ -295,15 +319,26 @@ export default function LDRRMOPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6 pb-24">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-6 pb-24">
+      <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
         
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
           <div>
-            <h1 className="text-2xl font-black flex items-center gap-2"><Siren className="w-6 h-6 text-rose-500" /> Unified Command Center</h1>
+            <h1 className="text-xl md:text-2xl font-black flex items-center gap-2"><Siren className="w-6 h-6 text-rose-500" /> Unified Command Center</h1>
             <p className="text-xs text-slate-400">Logged in as: {email}</p>
           </div>
-          <div className="flex items-center gap-2">
+          
+          <div className="flex flex-wrap items-center gap-2">
+            {/* DUTY STATUS TOGGLE */}
+            <button 
+              onClick={() => setIsOnDuty(!isOnDuty)} 
+              className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${
+                isOnDuty ? 'bg-emerald-600/20 text-emerald-400 border-emerald-600 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-slate-800 text-slate-500 border-slate-700'
+              }`}
+            >
+              {isOnDuty ? "🟢 ON DUTY" : "⚪ STANDBY"}
+            </button>
+
             {!audioPrimed && (
               <button onClick={primeAudio} className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 animate-pulse">
                 <Volume2 className="w-4 h-4" /> Enable Audio
@@ -313,33 +348,41 @@ export default function LDRRMOPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-slate-900 border border-rose-900/50 p-3 rounded-xl text-center">
+        <div className="grid grid-cols-3 gap-2 md:gap-3 mb-4 md:mb-6">
+          <div className="bg-slate-900 border border-rose-900/50 p-2 md:p-3 rounded-xl text-center">
             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Pending</p>
-            <p className="text-2xl font-black text-rose-500">{stats.pending}</p>
+            <p className="text-xl md:text-2xl font-black text-rose-500">{stats.pending}</p>
           </div>
-          <div className="bg-slate-900 border border-blue-900/50 p-3 rounded-xl text-center">
+          <div className="bg-slate-900 border border-blue-900/50 p-2 md:p-3 rounded-xl text-center">
             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Responding</p>
-            <p className="text-2xl font-black text-blue-500">{stats.responding}</p>
+            <p className="text-xl md:text-2xl font-black text-blue-500">{stats.responding}</p>
           </div>
-          <div className="bg-slate-900 border border-emerald-900/50 p-3 rounded-xl text-center">
+          <div className="bg-slate-900 border border-emerald-900/50 p-2 md:p-3 rounded-xl text-center">
             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Resolved</p>
-            <p className="text-2xl font-black text-emerald-500">{stats.resolved}</p>
+            <p className="text-xl md:text-2xl font-black text-emerald-500">{stats.resolved}</p>
           </div>
         </div>
 
-        <div className="flex justify-between items-center gap-2 overflow-x-auto pb-2">
-          <div className="flex gap-2">
+        <div className="flex flex-wrap justify-between items-center gap-2 pb-2">
+          <div className="flex gap-2 overflow-x-auto">
             {["All", "PNP", "BFP", "LDRRMO"].map((tab) => (
-              <button key={tab} onClick={() => setFilterType(tab as any)} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${filterType === tab ? 'bg-rose-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>{tab}</button>
+              <button key={tab} onClick={() => setFilterType(tab as any)} className={`px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition-all ${filterType === tab ? 'bg-rose-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>{tab}</button>
             ))}
           </div>
-          <button 
-            onClick={handleClearResolved} 
-            className="whitespace-nowrap px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
-          >
-            <Trash2 className="w-3 h-3" /> Clear Resolved
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setShowAnalytics(true)} 
+              className="whitespace-nowrap px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-700 text-blue-400 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
+            >
+              <BarChart3 className="w-3 h-3" /> Analytics
+            </button>
+            <button 
+              onClick={handleClearResolved} 
+              className="whitespace-nowrap px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
+            >
+              <Trash2 className="w-3 h-3" /> Clear
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -355,13 +398,13 @@ export default function LDRRMOPage() {
               }`}>
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <h3 className="font-black text-lg text-white flex items-center gap-2">
+                    <h3 className="font-black text-base md:text-lg text-white flex items-center gap-2">
                       {inc.type === "Sunog" ? <Flame className="w-5 h-5 text-rose-500" /> : 
-                       inc.type === "Holdap" || inc.type === "Crime" ? <ShieldCheck className="w-5 h-5 text-blue-400" /> : 
+                       ["Pamamaril", "Holdap", "Away Pamilya", "Crime"].includes(inc.type) ? <ShieldCheck className="w-5 h-5 text-blue-400" /> : 
                        <Activity className="w-5 h-5 text-amber-500" />}
                       {inc.type}
                     </h3>
-                    <div className="flex items-center mt-1">
+                    <div className="flex flex-wrap items-center mt-1">
                       <p className="text-xs text-slate-400">{new Date(inc.timestamp).toLocaleString()}</p>
                       {inc.status === 'pending' && <TimeAgo timestamp={inc.timestamp} />}
                     </div>
@@ -376,7 +419,7 @@ export default function LDRRMOPage() {
                 {inc.photo && <img src={inc.photo} alt="Incident" className="w-full h-48 object-cover rounded-xl mb-3 border border-slate-700" />}
                 
                 <div className="flex flex-col gap-2 mb-4">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <a href={`https://www.google.com/maps?q=${inc.lat},${inc.lng}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-bold"><MapPin className="w-3 h-3" /> View on Map</a>
                     <span className="text-xs text-slate-500">| Area: {inc.area || "Unknown"}</span>
                   </div>
@@ -393,8 +436,8 @@ export default function LDRRMOPage() {
                     </div>
                   </div>
                   
-                  {/* STATIC MAP PREVIEW PARA SA ANTI-SCAM */}
-                  <div className="w-full h-32 rounded-xl overflow-hidden border border-slate-700 mt-1">
+                  {/* MALAKING MAP PREVIEW PARA SA MOBILE */}
+                  <div className="w-full h-48 md:h-64 rounded-xl overflow-hidden border border-slate-700 mt-1">
                     <iframe 
                       width="100%" 
                       height="100%" 
@@ -420,13 +463,13 @@ export default function LDRRMOPage() {
                 {inc.status === "pending" && (
                   <div className="space-y-3">
                     <div className="flex gap-2">
-                      <button onClick={() => handleStatusChange(inc.id, "responding")} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 shadow-lg shadow-blue-900/50">
+                      <button disabled={!isOnDuty} onClick={() => handleStatusChange(inc.id, "responding")} className={`flex-1 py-2 font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-all ${isOnDuty ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/50' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}>
                         <Siren className="w-4 h-4" /> Responding
                       </button>
-                      <button onClick={() => handleStatusChange(inc.id, "verified")} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1">
+                      <button disabled={!isOnDuty} onClick={() => handleStatusChange(inc.id, "verified")} className={`flex-1 py-2 font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-all ${isOnDuty ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/50' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}>
                         <CheckCircle2 className="w-4 h-4" /> Verify
                       </button>
-                      <button onClick={() => handleStatusChange(inc.id, "dismissed")} className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1">
+                      <button disabled={!isOnDuty} onClick={() => handleStatusChange(inc.id, "dismissed")} className={`flex-1 py-2 font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-all ${isOnDuty ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}>
                         <XCircle className="w-4 h-4" /> Dismiss
                       </button>
                     </div>
@@ -445,10 +488,10 @@ export default function LDRRMOPage() {
 
                 {inc.status === "responding" && (
                   <div className="flex gap-2">
-                    <button onClick={() => handleStatusChange(inc.id, "verified")} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1">
+                    <button disabled={!isOnDuty} onClick={() => handleStatusChange(inc.id, "verified")} className={`flex-1 py-2 font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-all ${isOnDuty ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}>
                       <CheckCircle2 className="w-4 h-4" /> Mark as Resolved
                     </button>
-                    <button onClick={() => handleStatusChange(inc.id, "dismissed")} className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1">
+                    <button disabled={!isOnDuty} onClick={() => handleStatusChange(inc.id, "dismissed")} className={`flex-1 py-2 font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-all ${isOnDuty ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}>
                       <XCircle className="w-4 h-4" /> Dismiss
                     </button>
                   </div>
@@ -458,6 +501,41 @@ export default function LDRRMOPage() {
           )}
         </div>
       </div>
+
+      {/* ANALYTICS MODAL */}
+      {showAnalytics && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><BarChart3 className="w-5 h-5 text-blue-400" /> Reports Analytics</h2>
+              <button onClick={() => setShowAnalytics(false)} className="p-1 text-slate-400 hover:text-white"><XCircle className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <span className="text-sm text-slate-300">Total Reports:</span>
+                <span className="font-bold text-white">{statsData.total}</span>
+              </div>
+              <div className="flex justify-between bg-emerald-950/50 border border-emerald-800 p-3 rounded-xl">
+                <span className="text-sm text-emerald-300">Verified / Resolved:</span>
+                <span className="font-bold text-emerald-400">{statsData.resolved}</span>
+              </div>
+              <div className="flex justify-between bg-rose-950/50 border border-rose-800 p-3 rounded-xl">
+                <span className="text-sm text-rose-300">Dismissed (Fake):</span>
+                <span className="font-bold text-rose-400">{statsData.dismissed}</span>
+              </div>
+              <div className="flex justify-between bg-amber-950/50 border border-amber-800 p-3 rounded-xl">
+                <span className="text-sm text-amber-300">Pending / Responding:</span>
+                <span className="font-bold text-amber-400">{statsData.pending}</span>
+              </div>
+              <div className="flex justify-between bg-blue-950/50 border border-blue-800 p-3 rounded-xl">
+                <span className="text-sm text-blue-300">Avg Response Time:</span>
+                <span className="font-bold text-blue-400">{statsData.avgResponseTime} mins</span>
+              </div>
+            </div>
+            <button onClick={() => setShowAnalytics(false)} className="w-full mt-4 py-3 bg-slate-800 text-white font-bold rounded-xl text-sm hover:bg-slate-700">Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
