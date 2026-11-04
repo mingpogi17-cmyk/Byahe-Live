@@ -4,11 +4,18 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { ArrowLeft, Ticket, MapPin, Clock } from "lucide-react";
+import { database } from "@/lib/firebase"; // <--- IDINAGDAG
+import { ref, set } from "firebase/database"; // <--- IDINAGDAG
+import { useUserId } from "@/lib/useUserId"; // <--- IDINAGDAG
+import { useToast } from "@/components/Toast"; // <--- IDINAGDAG
 
 export default function CommuterTicketPage() {
+  const userId = useUserId();
+  const { toast } = useToast();
+  
   const [showQR, setShowQR] = useState(false);
-  const [ticketId] = useState(() => "TKT-" + Math.random().toString(36).substring(2, 8).toUpperCase());
-  const [countdown, setCountdown] = useState(180); // 3 minutes in seconds
+  const [ticketId, setTicketId] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(180);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -22,6 +29,30 @@ export default function CommuterTicketPage() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const handleGetTicket = async () => {
+    try {
+      // 1. Gumawa ng bagong ID
+      const newTicketId = "TKT-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+      
+      // 2. I-save sa Firebase
+      await set(ref(database, `tickets/${newTicketId}`), {
+        id: newTicketId,
+        userId: userId || "anonymous",
+        status: "active",
+        timestamp: Date.now(),
+      });
+
+      // 3. I-save sa LocalStorage para mabasa ng "Bababa Ako" button
+      localStorage.setItem("active_ticket", newTicketId);
+      
+      setTicketId(newTicketId);
+      setShowQR(true);
+      toast("Ticket generated!", "success");
+    } catch (err) {
+      toast("Error generating ticket.", "error");
+    }
   };
 
   return (
@@ -46,7 +77,7 @@ export default function CommuterTicketPage() {
               <p className="text-slate-400 text-sm">Pindutin ang button para makakuha ng QR Code. Ipakita ito sa konduktor para mabigyan ng priority seat.</p>
             </div>
             <button 
-              onClick={() => setShowQR(true)}
+              onClick={handleGetTicket}
               className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-lg rounded-2xl shadow-lg shadow-emerald-500/20 transition-all"
             >
               Kumuha ng Ticket
@@ -54,16 +85,14 @@ export default function CommuterTicketPage() {
           </div>
         ) : (
           <div className="w-full space-y-4">
-            {/* Timer Banner */}
             <div className="bg-amber-950/50 border border-amber-500/30 text-amber-200 px-4 py-3 rounded-xl flex items-center justify-between">
               <span className="text-sm font-semibold flex items-center gap-2"><Clock className="w-4 h-4" /> Oras na natitira:</span>
               <span className="font-mono text-xl font-bold">{formatTime(countdown)}</span>
             </div>
 
-            {/* QR Code Card */}
             <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center space-y-4 animate-in fade-in zoom-in duration-300">
               <div className="bg-emerald-100 p-4 rounded-2xl">
-                <QRCodeSVG value={ticketId} size={200} />
+                {ticketId && <QRCodeSVG value={ticketId} size={200} />}
               </div>
               <div className="text-center">
                 <p className="text-slate-900 font-black text-2xl tracking-widest">{ticketId}</p>
