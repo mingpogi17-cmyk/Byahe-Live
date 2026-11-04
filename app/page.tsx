@@ -723,12 +723,16 @@ export default function HomePage() {
   </button>
 )}
 
+                {/* 🎟️ PRIORITY TICKET BUTTON */}
+        <Link 
+          href="/commuter/ticket" 
+          className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all bg-emerald-600/20 text-emerald-400 border border-emerald-900/50 hover:bg-emerald-600/30"
+        >
+          <Ticket className="w-5 h-5" /> Get Priority Ticket
+        </Link>
+
         <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
           <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">More Options</span>
-          <button onClick={() => setShowMoreOptions(!showMoreOptions)} className="p-1.5 bg-slate-800 rounded-lg text-slate-300 hover:text-white transition-colors">
-            <Settings className="w-4 h-4" />
-          </button>
-        </div>
 
         {showMoreOptions && (
           <div className="space-y-3 p-4 bg-slate-900/50 border border-slate-800 rounded-2xl animate-in slide-in-from-top-2">
