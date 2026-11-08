@@ -676,67 +676,85 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main className="w-full max-w-md space-y-4 pt-4">
+            <main className="w-full max-w-md space-y-4 pt-4">
         
+        {/* LOCATION SELECTOR */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
-            <span className="text-xs text-slate-400 flex items-center gap-1"><Bus className="w-3 h-3" /> Hinihintay ko:</span>
-            <select 
-              value={waitingVehicle} 
-              onChange={(e) => setWaitingVehicle(e.target.value as any)}
-              className="bg-slate-800 text-emerald-400 text-xs font-bold rounded-lg px-2 py-1 outline-none border border-slate-700"
-            >
-              {["Any", "Van", "Bus", "MiniBus", "Taxi", "Tricycle", "Motor"].map(v => (
-                <option key={v} value={v}>{v === "Any" ? "Any Vehicle" : v}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={handleManualWaitingPing} className={`py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 transition-all ${
-              isWaiting 
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-800/50 hover:bg-amber-500/30' 
-                : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg'
-            }`}>
-              <BellRing className={`w-6 h-6 ${isWaiting ? 'animate-pulse' : ''}`} /> 
-              {isWaiting ? "Kanselahin (Cancel)" : "Naghihintay Ako"}
-            </button>
-            <button onClick={handleRequestStop} className="py-4 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 bg-rose-600 text-white hover:bg-rose-500 shadow-lg">
-              <Bell className="w-6 h-6" /> Bababa Ako
-            </button>
+            <div className="relative">
+              <button onClick={() => setShowShedDropdown(!showShedDropdown)} className="flex items-center gap-2 text-sm font-bold text-slate-200 hover:text-white transition-colors">
+                <MapPin className="w-4 h-4 text-emerald-400" /> {selectedShed.name} <ChevronDown className="w-4 h-4 text-slate-500" />
+              </button>
+              {showShedDropdown && (
+                <div className="absolute top-full left-0 mt-2 w-56 max-h-64 overflow-y-auto bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 animate-in fade-in slide-in-from-top-1">
+                  {SHEDS.map(shed => (
+                    <button key={shed.id} onClick={() => { setSelectedShed(shed); setShowShedDropdown(false); }} className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-700 transition-colors ${selectedShed.id === shed.id ? 'text-emerald-400 font-bold bg-slate-700/50' : 'text-slate-300'}`}>{shed.name}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShowFareMatrix(true)} className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-950/30 px-2 py-1 rounded-md border border-amber-900/50"><Wallet className="w-3 h-3" /> Fare Guide</button>
+              <button onClick={handleFavoriteShed} className={`p-1.5 rounded-lg transition-colors ${isFavorite ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'}`}><Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} /></button>
+            </div>
           </div>
         </div>
 
-       {isEmergencyEnabled && (
-  <button
-    onClick={() => {
-      if (isBanned) return toast("Cannot report: Account suspended.", "error");
-      setIsUserActive(true);
-      setShowEmergencyModal(true);
-    }}
-    disabled={isBanned}
-    className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-      isBanned ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' : 'bg-rose-600/20 text-rose-400 border border-rose-900/50 hover:bg-rose-600/30'
-    }`}
-  >
-    <Camera className="w-5 h-5" /> {isBanned ? "Account Suspended" : "Report Emergency (Photo)"}
-  </button>
-)}
+        {/* PRIMARY ACTIONS (Pumila & Ticket) */}
+        <div className="grid grid-cols-2 gap-2">
+          <Link 
+            href="/commuter/ticket" 
+            className="py-5 rounded-2xl font-black text-lg flex flex-col items-center justify-center gap-1 transition-all bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg shadow-emerald-500/20"
+          >
+            <Users className="w-8 h-8" /> 
+            Pumila
+          </Link>
+          <Link 
+            href="/commuter/ticket" 
+            className="py-5 rounded-2xl font-bold text-sm flex flex-col items-center justify-center gap-1 transition-all bg-blue-600/20 text-blue-400 border border-blue-900/50 hover:bg-blue-600/30"
+          >
+            <Ticket className="w-8 h-8" /> 
+            Ticket
+          </Link>
+        </div>
 
-                {/* 🎟️ PRIORITY TICKET BUTTON */}
-        <Link 
-          href="/commuter/ticket" 
-          className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all bg-emerald-600/20 text-emerald-400 border border-emerald-900/50 hover:bg-emerald-600/30"
-        >
-          <Ticket className="w-5 h-5" /> Get Priority Ticket
-        </Link>
+        {/* OTHER ACTIONS (Waiting & Bababa) */}
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={handleManualWaitingPing} className={`py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+            isWaiting ? 'bg-amber-500/20 text-amber-400 border border-amber-800/50' : 'bg-slate-800 text-slate-300 border border-slate-700'
+          }`}>
+            <BellRing className={`w-4 h-4 ${isWaiting ? 'animate-pulse' : ''}`} /> 
+            {isWaiting ? "Kanselahin" : "Naghihintay Ako"}
+          </button>
+          <button onClick={handleRequestStop} className="py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 bg-amber-600/20 text-amber-400 border border-amber-900/50 hover:bg-amber-600/30">
+            <Bell className="w-4 h-4" /> Bababa Ako
+          </button>
+        </div>
 
-              <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+        {/* HIDDEN EMERGENCY REPORT BUTTON */}
+        {isEmergencyEnabled && (
+          <button 
+            onClick={() => {
+              if (isBanned) return toast("Cannot report: Account suspended.", "error");
+              setIsUserActive(true); 
+              setShowEmergencyModal(true);
+            }}
+            disabled={isBanned}
+            className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+              isBanned ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' : 'bg-rose-600/20 text-rose-400 border border-rose-900/50 hover:bg-rose-600/30'
+            }`}
+          >
+            <Camera className="w-5 h-5" /> {isBanned ? "Account Suspended" : "Report Emergency (Photo)"}
+          </button>
+        )}
+
+        <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
           <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">More Options</span>
           <button onClick={() => setShowMoreOptions(!showMoreOptions)} className="p-1.5 bg-slate-800 rounded-lg text-slate-300 hover:text-white transition-colors">
             <Settings className="w-4 h-4" />
           </button>
         </div>
+
         {showMoreOptions && (
           <div className="space-y-3 p-4 bg-slate-900/50 border border-slate-800 rounded-2xl animate-in slide-in-from-top-2">
             <div className="space-y-2">
@@ -766,27 +784,6 @@ export default function HomePage() {
             </button>
           </div>
         )}
-
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
-            <div className="relative">
-              <button onClick={() => setShowShedDropdown(!showShedDropdown)} className="flex items-center gap-2 text-sm font-bold text-slate-200 hover:text-white transition-colors">
-                <MapPin className="w-4 h-4 text-emerald-400" /> {selectedShed.name} <ChevronDown className="w-4 h-4 text-slate-500" />
-              </button>
-              {showShedDropdown && (
-                <div className="absolute top-full left-0 mt-2 w-56 max-h-64 overflow-y-auto bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 animate-in fade-in slide-in-from-top-1">
-                  {SHEDS.map(shed => (
-                    <button key={shed.id} onClick={() => { setSelectedShed(shed); setShowShedDropdown(false); }} className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-700 transition-colors ${selectedShed.id === shed.id ? 'text-emerald-400 font-bold bg-slate-700/50' : 'text-slate-300'}`}>{shed.name}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <button onClick={() => setShowFareMatrix(true)} className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-950/30 px-2 py-1 rounded-md border border-amber-900/50"><Wallet className="w-3 h-3" /> Fare Guide</button>
-              <button onClick={handleFavoriteShed} className={`p-1.5 rounded-lg transition-colors ${isFavorite ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'}`}><Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} /></button>
-            </div>
-          </div>
-        </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 flex items-center justify-between">
           <span className="text-xs text-slate-400 flex items-center gap-1"><Users className="w-3 h-3" /> Naghihintay sa Shed:</span>
@@ -829,9 +826,7 @@ export default function HomePage() {
                           {trip.isVerified && <ShieldCheck className="w-4 h-4 text-blue-400" />}
                         </h2>
                         {trip.destination && trip.destination !== "Unknown" && (
-                          <span className="text-[11px] text-blue-400 font-bold mb-0.5 block">
-                            🚐 Going to: {trip.destination}
-                          </span>
+                          <span className="text-[11px] text-blue-400 font-bold mb-0.5 block">🚐 Going to: {trip.destination}</span>
                         )}
                         <span className="text-[11px] text-slate-400 flex items-center gap-1">
                           <MapPin className="w-3 h-3" /> {distance.toFixed(1)} km away 
@@ -853,12 +848,7 @@ export default function HomePage() {
                       <span className="ml-2 px-1.5 py-0.5 bg-slate-800 rounded flex items-center gap-1 text-[10px] text-emerald-400 font-semibold"><Timer className="w-3 h-3" /> ETA: {etaDisplay}</span>
                     </span>
                     <div className="flex items-center gap-3">
-                      <a 
-                        href={`https://www.google.com/maps/dir/?api=1&destination=${trip.location.lat},${trip.location.lng}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-blue-400 hover:text-blue-300 font-semibold transition-colors"
-                      >
+                      <a href={`https://www.google.com/maps/dir/?api=1&destination=${trip.location.lat},${trip.location.lng}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-400 hover:text-blue-300 font-semibold transition-colors">
                         <Navigation className="w-3.5 h-3.5" /> Map
                       </a>
                       <button onClick={() => toggleAlarm(trip.tripId)} className={`flex items-center gap-1 transition-colors ${hasAlarm ? 'text-amber-400 font-bold' : 'text-slate-500 hover:text-slate-300'}`}>
@@ -881,7 +871,6 @@ export default function HomePage() {
           </div>
         )}
       </main>
-
       <footer className="text-center text-xs text-slate-500 my-8 pb-16 flex flex-col items-center gap-4">
         <div className="flex gap-3">
           <button 
