@@ -104,12 +104,12 @@ export default function PrivacyPage() {
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Code className="w-5 h-5 text-emerald-400" /> About the Developer
           </h2>
-          <div className="text-sm space-y-2">
-            <p><strong>Ray Mar Olandria</strong></p>
-            <p className="text-slate-400 italic">Founder & Lead Developer</p>
-            <p className="text-slate-400">Public Safety Advocate | 3-Year Emergency Responder</p>
+                   <div className="text-sm space-y-2">
+            <p><strong>Biyahe Live</strong></p>
+            <p className="text-slate-400 italic">Solo Developer & Founder</p>
+            <p className="text-slate-400">Davao del Sur, Philippines</p>
             <p className="mt-4 text-xs text-slate-500 leading-relaxed">
-              "Biyahe Live was built to bridge the gap between commuters, drivers, and emergency responders. Our mission is to make public transportation in Davao del Sur safer, more transparent, and more efficient. This is a passion project born out of a desire to serve the community."
+              "Biyahe Live is a passion project built by a solo developer from Davao del Sur. This app bridges the gap between commuters, drivers, and emergency responders through technology. It is an independent, community-driven initiative, not affiliated with any government agency."
             </p>
           </div>
         </section>
