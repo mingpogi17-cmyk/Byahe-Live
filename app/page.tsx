@@ -898,7 +898,7 @@ export default function HomePage() {
             <Coffee className="w-4 h-4" /> Support
           </button>
         </div>
-        <p>Biyahe Live © 2026 · Developed by Ray Mar Olandria</p>
+       <p>Biyahe Live © 2026 · Davao del Sur</p>
         <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline transition-colors">Privacy Policy & Terms of Service</Link>
       </footer>
 
@@ -947,8 +947,8 @@ export default function HomePage() {
               <div className="mt-4 pt-4 border-t border-slate-800 text-center">
                 <p className="text-[10px] text-slate-500 leading-relaxed">
                   <strong className="text-slate-400">Biyahe Live v1.0</strong><br/>
-                  Developed by <strong className="text-emerald-400">Ray Mar Olandria</strong><br/>
-                  <em className="text-[9px]">Public Safety Advocate | 3-Year Emergency Responder</em>
+                  A project by <strong className="text-emerald-400">Biyahe Live Team</strong><br/>
+<em className="text-[9px]">Public Safety & Transport Initiative</em>
                 </p>
                 <p className="text-[9px] text-slate-600 mt-2 italic">
                   Independence Notice: This is a private, independent application. It is NOT an official platform of the BFP, PNP, or any LGU. Not funded or endorsed by the government.
