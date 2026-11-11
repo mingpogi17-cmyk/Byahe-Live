@@ -25,6 +25,11 @@ export default function DriverDashboard() {
   const [seats, setSeats] = useState(14);
   const [earnings, setEarnings] = useState(0);
   const [fare, setFare] = useState(15);
+  
+  // BAGONG STATES PARA SA QUEUE
+  const [queueList, setQueueList] = useState<any[]>([]);
+  const [activeQueueTicket, setActiveQueueTicket] = useState<any | null>(null);
+  const [queueTimer, setQueueTimer] = useState(0); // 5 minutes = 300 seconds
   const [destination, setDestination] = useState(""); 
   const [reservedSeats, setReservedSeats] = useState(0);
   
