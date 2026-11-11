@@ -151,6 +151,44 @@ export default function DriverDashboard() {
     return () => unsub();
   }, [toast, vehicleType]);
 
+      // 3.5 QUEUE FETCHING
+    useEffect(() => {
+      if (!isTripActive) return;
+      const queueRef = ref(database, `queue/sta_cruz`); // I-update ang shed id kung dynamic
+      const unsub = onValue(queueRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = Object.values(snapshot.val()) as any[];
+          data.sort((a, b) => a.queueNumber - b.queueNumber);
+          setQueueList(data);
+        } else {
+          setQueueList([]);
+        }
+      });
+      return () => unsub();
+    }, [isTripActive]);
+    // QUEUE TIMER LOGIC
+  useEffect(() => {
+    if (queueTimer > 0) {
+      const timer = setInterval(() => setQueueTimer(prev => prev - 1), 1000);
+      return () => clearInterval(timer);
+    }
+  }, [queueTimer]);
+
+  const handleAcceptPassenger = (ticket: any) => {
+    setActiveQueueTicket(ticket);
+    setQueueTimer(300); // 5 minutes = 300 seconds
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+  };
+
+  const handleSkipPassenger = () => {
+    if (activeQueueTicket) {
+      // Dito natin i-remove sa queue at bibigyan ng strike
+      setActiveQueueTicket(null);
+      setQueueTimer(0);
+      toast("Passenger skipped. Moving to next.", "info");
+    }
+  };
+    // 4. STOP REQUEST (Bababa Ako)
   // 4. STOP REQUEST (Bababa Ako)
   useEffect(() => {
     const stopRef = ref(database, "stop_request");
@@ -499,6 +537,34 @@ export default function DriverDashboard() {
           <Link href="/driver/scan" className="flex items-center justify-center gap-2 py-3 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-xl font-bold hover:bg-blue-600/30 transition-all text-xs">
             <QrCode className="w-4 h-4" /> Scan Ticket
           </Link>
+                    {/* QUEUE LIST VIEW */}
+          {queueList.length > 0 && (
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 mb-2">
+              <p className="text-xs font-bold text-slate-300 mb-2 flex items-center gap-2">
+                <Users className="w-4 h-4 text-amber-400" /> Nakapila sa Terminal: {queueList.length}
+              </p>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {queueList.map((ticket) => (
+                  <div key={ticket.id} className={`p-2 rounded-lg border flex justify-between items-center ${activeQueueTicket?.id === ticket.id ? 'bg-amber-950/50 border-amber-500' : 'bg-slate-900 border-slate-700'}`}>
+                    <div>
+                      <p className="text-xs font-bold text-white">#{ticket.queueNumber}</p>
+                      <p className="text-[10px] text-slate-400">{new Date(ticket.timestamp).toLocaleTimeString()}</p>
+                    </div>
+                    {activeQueueTicket?.id === ticket.id ? (
+                      <button onClick={handleSkipPassenger} className="px-2 py-1 bg-rose-600/20 text-rose-400 border border-rose-600/50 rounded text-[10px] font-bold">Skip ({queueTimer}s)</button>
+                    ) : (
+                      <button onClick={() => handleAcceptPassenger(ticket)} className="px-2 py-1 bg-emerald-600/20 text-emerald-400 border border-emerald-600/50 rounded text-[10px] font-bold">Accept</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            <Link href="/driver/scan" className="flex items-center justify-center gap-2 py-3 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-xl font-bold hover:bg-blue-600/30 transition-all text-xs">
+              <QrCode className="w-4 h-4" /> Scan Ticket
+            </Link>
           <button onClick={() => toast("Settings feature coming soon!", "info")} className="flex items-center justify-center gap-2 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700 transition-all text-xs">
             <Settings className="w-4 h-4" /> Settings
           </button>
